@@ -5,28 +5,47 @@
 #   【V4.0 启用】随 tasks.md T-4.0.7 落地并当天实跑后生效；未建成时给出明确指路，不静默失败
 # 参数透传用变量：make test T="-k permission"（make 会吞 -k，anti-patterns：rag-kb 实测）
 
-.PHONY: help docs-check openq env-check test lint secret-scan health run api mcp eval semantic-check governance-check check bootstrap
+.PHONY: help docs-check openq env-check test lint format-check secret-scan health run api mcp eval semantic-check governance-check check bootstrap python-guard ci
 
-PY := python3
 SCRIPTS := scripts
+PYTHON ?=
 
-# 若仓库内 .venv 存在则优先使用（含项目依赖 pyyaml/pandas/numpy），
-# 否则退回系统 python3（此时部分“立即可用” target 会按设计指路到 T-4.0.5）。
-# 首次使用请先跑 `make bootstrap` 创建 .venv。
-ifeq ($(wildcard .venv/bin/python),)
-PY := python3
+# 解释器优先级：显式 PYTHON → .venv/bin/python → python3.13 → 版本合格的 python3。
+# 不用系统 python3 的默认版本猜环境（本机曾为 3.8.5）；缺失时由 python-guard 显式报错。
+ifeq ($(strip $(PYTHON)),)
+PY := $(shell \
+	if [ -x .venv/bin/python ]; then \
+		echo .venv/bin/python; \
+	elif command -v python3.13 >/dev/null 2>&1; then \
+		echo python3.13; \
+	elif python3 -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 13) else 1)' >/dev/null 2>&1; then \
+		echo python3; \
+	else \
+		echo __missing__; \
+	fi)
 else
-PY := .venv/bin/python
+PY := $(PYTHON)
 endif
+
+# bootstrap 不能复用待创建的 .venv；只从 PYTHON / python3.13 / 合格 python3 中选。
+BOOT_PY := $(if $(strip $(PYTHON)),$(PYTHON),$(shell \
+	if command -v python3.13 >/dev/null 2>&1; then \
+		echo python3.13; \
+	elif python3 -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 13) else 1)' >/dev/null 2>&1; then \
+		echo python3; \
+	else \
+		echo __missing__; \
+	fi))
 
 help:
 	@echo "【立即可用】"
 	@echo "make docs-check   - 文档自检（validate_docs.py）"
 	@echo "make openq        - 汇总待确认项（collect_open_questions.py）"
-	@echo "make env-check    - 检查 Python 依赖可导入"
+	@echo "make env-check    - 检查 Python 版本与依赖可导入"
 	@echo "【V4.0 启用】"
 	@echo "make test         - pytest 全量（V2 九场景 + V3 八场景 + 单元）"
 	@echo "make lint         - ruff check + format --check"
+	@echo "make format-check - ruff format --check"
 	@echo "make secret-scan  - 密钥/敏感信息扫描（QG-04，P-01）"
 	@echo "make health       - 服务健康检查（API /health，恢复后用）"
 	@echo "make run          - 启动 API 服务（127.0.0.1:8080）"
@@ -36,41 +55,62 @@ help:
 	@echo "make semantic-check - 语义层/治理 YAML 校验（三字段+护栏）"
 	@echo "make governance-check - 同 semantic-check 的治理部分"
 	@echo "make check        - 提交前一条（= lint + test + semantic-check + secret-scan）"
-	@echo "make bootstrap    - 创建 .venv 并安装基础依赖（首次使用）"
+	@echo "make ci           - CI 全量门禁（快闸先、慢闸后）"
+	@echo "make bootstrap    - 创建 .venv 并安装锁定依赖（首次使用）"
 
 # ---------- 环境引导 ----------
+python-guard:
+	@if [ "$(PY)" = "__missing__" ]; then \
+		echo "需要 Python 3.13，或先 make bootstrap"; exit 2; \
+	fi
+	@$(PY) -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 13) else 1)' \
+		|| (echo "需要 Python 3.13，或先 make bootstrap"; exit 2)
+
 bootstrap:
-	@echo "创建 .venv 并安装基础依赖（pyyaml / pandas / numpy）"
-	python3 -m venv .venv
+	@if [ "$(BOOT_PY)" = "__missing__" ]; then \
+		echo "需要 Python 3.13：请安装 python3.13，或用 PYTHON=/path/to/python3.13 指定"; exit 2; \
+	fi
+	$(BOOT_PY) -m venv .venv
 	.venv/bin/python -m pip install -U pip
-	.venv/bin/python -m pip install pyyaml pandas numpy
+	.venv/bin/python -m pip install -r requirements.lock.txt
 	@echo "完成。之后 make 会自动优先使用 .venv/bin/python"
 
 # ---------- 【立即可用】 ----------
-docs-check:
+docs-check: python-guard
 	$(PY) $(SCRIPTS)/validate_docs.py .
 
-openq:
+openq: python-guard
 	$(PY) $(SCRIPTS)/collect_open_questions.py .
 
-env-check:
+env-check: python-guard
+	@$(PY) -c "import sys; print(f'Python {sys.version.split()[0]}')"
 	@$(PY) -c "import pandas, numpy, yaml; print('core deps OK')" \
-	  || (echo "缺少依赖：pip install -r requirements.txt（T-4.0.5）"; exit 1)
+		|| (echo "缺少依赖：$(PY) -m pip install -r requirements.lock.txt"; exit 1)
 
 # ---------- 【V4.0 启用】 ----------
-test:
+test: python-guard
 	@test -d tests || (echo "tests/ 未建成——见 tasks.md T-4.0.6"; exit 1)
 	$(PY) -m pytest tests/ -q $(T)
 
-lint:
+lint: python-guard
 	@test -f requirements.txt || (echo "requirements.txt 未建成——见 T-4.0.5"; exit 1)
-	$(PY) -m ruff check src/ tests/ && $(PY) -m ruff format --check src/ tests/
+	$(PY) -m ruff check src/ tests/
+	$(PY) -m ruff format --check src/ tests/
+
+format-check: python-guard
+	$(PY) -m ruff format --check src/ tests/
 
 secret-scan:
-	@test -d src || (echo "src/ 未建成——见 tasks.md T-4.0.1"; exit 1)
-	@if grep -rnE "(api[_-]?key|secret|token|password|passwd| AKLT|AKIA)[[:space:]]*[:=][[:space:]]*['\"][^'\"]{8,}" src/ tests/ evals/ --include="*.py" --include="*.yaml"; then \
-	  echo "↑ 疑似密钥/连接串命中——见 AGENTS.md P-01，一票否决"; exit 1; \
-	else echo "secret-scan: 0 命中"; fi
+	@if git grep -nE "(api[_-]?key|secret|token|password|passwd| AKLT|AKIA)[[:space:]]*[:=][[:space:]]*['\"][^'\"]{8,}"; then \
+		echo "↑ 疑似密钥/连接串命中——见 AGENTS.md P-01，一票否决"; exit 1; \
+	else \
+		status=$$?; \
+		if [ $$status -eq 1 ]; then \
+			echo "secret-scan: 0 命中"; \
+		else \
+			echo "secret-scan: git grep 执行失败"; exit $$status; \
+		fi; \
+	fi
 
 health:
 	@test -d src/riskqa/api || (echo "API 未建成——见 tasks.md T-4.1.5"; exit 1)
@@ -92,13 +132,16 @@ eval:
 	@test -d tests || (echo "评估 runner 未建成——见 tasks.md T-4.1.8"; exit 1)
 	$(PY) -m riskqa.orchestration.eval_runner --golden evals/golden_set.yaml
 
-semantic-check:
+semantic-check: python-guard
 	@test -f config/semantic_view.yaml || (echo "语义层未外置——见 tasks.md T-4.0.2"; exit 1)
 	PYTHONPATH=src $(PY) -m riskqa.semantic.check config/semantic_view.yaml
 
-governance-check:
+governance-check: python-guard
 	@test -f config/governance.yaml || (echo "治理配置未外置——见 T-4.0.2"; exit 1)
 	PYTHONPATH=src $(PY) -m riskqa.governance.check config/governance.yaml
 
 check: lint test semantic-check secret-scan
 	@echo "check 通过"
+
+ci: docs-check openq secret-scan lint semantic-check governance-check test
+	@echo "ci 全部通过"
