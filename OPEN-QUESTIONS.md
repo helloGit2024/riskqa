@@ -29,6 +29,7 @@
 | 8 | 加急通道的具体触发条件？ | V3 文档 §10.1 | 默认"≥5 独立用户或管理层问过"；首次复盘会校准 | 你 |
 | 9 | 内网 pip 源是否可用？ | assumptions A-07 | 按公司内网源写 requirements；装不上先 vendor 到 `third_party/` | 运维 |
 | 10 | 回测场景的 OOT 数据从哪来？ | releases V4.3 | V4.0—V4.2 不依赖；V4.3 启动时确认 | 模型团队 |
+| 11 | legacy V3 的 `row_policies` 是扁平字符串（如 `{'analyst_qa': "channel IN (...)"}`），而 `row_filter(role, table)` 按两层字典读取，运行必抛 `AttributeError: 'str' object has no attribute 'get'`；影响行级权限（P-10）实际不可用 | legacy V3 内嵌 `GOVERNANCE_YAML` 的 `row_policies`；B1 迁移后的 `src/riskqa/semantic/layer.py` | 原样保留（行为等价迁移，未修）；T-4.0.2 外置 YAML 时规范为 `{role: {table: 条件}}` 两层结构并补回归测试；来源：B1 行为等价迁移时发现 | 你 |
 
 ---
 
