@@ -40,6 +40,26 @@ class SemanticLayer:
     def metric_enum(self) -> list[str]:
         return sorted(self.metrics)
 
+    def alias_index(self) -> dict[str, str]:
+        """别名 → 正式指标名。晋升时把问法聚类回填到这里"""
+        idx: dict[str, str] = {}
+        for name, m in self.metrics.items():
+            idx[name.lower()] = name
+            for a in m.get("aliases", []):
+                idx[a.lower()] = name
+        return idx
+
+    def resolve_alias(self, token: str) -> str | None:
+        return self.alias_index().get(token.strip().lower())
+
+    def to_yaml(self) -> str:
+        return yaml.safe_dump(
+            {"version": self.version,
+             "metrics": list(self.metrics.values()),
+             "tables": list(self.tables.values()),
+             "row_policies": self.row_policies},
+            allow_unicode=True, sort_keys=False)
+
     @property
     def dim_enum(self) -> list[str]:
         return sorted({d for m in self.metrics.values() for d in m["dims"]})
