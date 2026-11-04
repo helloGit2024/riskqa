@@ -35,6 +35,8 @@
 | 15 | 分组问数中某组算出 NaN 时，是否应让整条问数失败？真实场景：① 新渠道当月只有申请、未放款（`is_pass==1` 为空）→ 该组 `fpd30_rate=NaN`；② 小客群只有单一 `y`（全好人或全坏账）→ 该组 `ks/auc=NaN`。T-4.0.3 只在 store 层拒收 NaN，未改编排层，因此当前会让整条问数失败 | `calc/metrics.py` 的四个显式 NaN 分支；`tools/dispatch.py`、`orchestration/graph_qa.py` 的 `facts.put` 调用点；T-4.0.3 的 `store/facts.py` | 保留 store 层拒收（数字纪律优先）；默认路径：T-4.0.6 写测试固化"整组缺失 vs 整问失败"的预期，再决定是否改为 NULL/原因码；来源：T-4.0.3 决策点 2 复核 | 你 |
 | 16 | "假数字"：空表 `psi` 返回 `0.0`、`score` 全缺失时 `ks=1.0`/`auc=0.0`——不抛错也不返回 NaN，比 NaN 更难发现 | `calc/metrics.py` 的 `psi/ks/auc` 实现（legacy V2 同源） | 保留 legacy 行为不修（V4.0 明确不改计算逻辑）；默认路径：T-4.0.6 固化边界测试，并在 store 层之外增加样本量/有效值告警；来源：T-4.0.3 决策点 2 复核（实测 pandas 2.0.3） | 你 |
 | 17 | `Fact.data_as_of` 在内存版 `Fact` 中存在，但 `docs/data-model.md` §2.2 的 `fact` 表没有该列；T-4.0.3 按文档不落库，由 `SqliteFactStore` 构造器/manifest 提供 | `src/riskqa/facts/store.py`；`src/riskqa/store/facts.py`；`docs/data-model.md` §2.2 | 不落库（以文档为准，避免自创列）；默认路径：T-4.0.4 manifest 实战时确认 data_as_of 的最终归属，再决定是否补列/走 manifest；来源：T-4.0.3 | 你 |
+| 18 | Parquet 快照未实现：本机 `pyarrow`/`fastparquet` 均未安装，`write_snapshot(fmt="parquet")` 与 `load_snapshot_file` 遇到 parquet 会抛 `ParquetEngineMissingError`。C-2 已确认格式为 CSV/Parquet，但 V4.0 本批只交付 CSV | `src/riskqa/data/snapshot.py`；`docs/constraints.md` §三（单文件 ≤500MB、100 万—500 万行） | 不装依赖（R16）；默认路径：T-4.0.5 建 `requirements.txt` 时评估 pyarrow 版本/体积后决定，未批准前快照只走 CSV；来源：T-4.0.4 | 运维/你 |
+| 19 | 本机 Python 环境版本与早前记录不一致：实测 `.venv` 为 `pandas 3.1.0 / numpy 2.5.4`，早前迁移记录为 `pandas 2.0.3`；pandas 3 的字符串列是 `str`（`StringDtype`）而非 `object`，`normalize_missing` 已补该分支，否则空串归一在写读两侧不一致会导致 `data_hash` 漂移 | `src/riskqa/data/snapshot.py` 的 `normalize_missing`；`requirements.txt`（尚未建） | 以实测环境为准并已补分支；默认路径：T-4.0.5 锁版本后复测快照往返与 T-4.0.6 的 legacy 场景；来源：T-4.0.4 快照验证 | 你 |
 
 ---
 
