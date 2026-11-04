@@ -36,6 +36,7 @@
 | 16 | "假数字"：空表 `psi` 返回 `0.0`、`score` 全缺失时 `ks=1.0`/`auc=0.0`——不抛错也不返回 NaN，比 NaN 更难发现 | `calc/metrics.py` 的 `psi/ks/auc` 实现（legacy V2 同源） | 保留 legacy 行为不修（V4.0 明确不改计算逻辑）；默认路径：T-4.0.6 固化边界测试，并在 store 层之外增加样本量/有效值告警；来源：T-4.0.3 决策点 2 复核（实测 pandas 2.0.3） | 你 |
 | 17 | `Fact.data_as_of` 在内存版 `Fact` 中存在，但 `docs/data-model.md` §2.2 的 `fact` 表没有该列；T-4.0.3 按文档不落库，由 `SqliteFactStore` 构造器/manifest 提供 | `src/riskqa/facts/store.py`；`src/riskqa/store/facts.py`；`docs/data-model.md` §2.2 | 不落库（以文档为准，避免自创列）；默认路径：T-4.0.4 manifest 实战时确认 data_as_of 的最终归属，再决定是否补列/走 manifest；来源：T-4.0.3 | 你 |
 | 18 | Parquet 快照未实现：本机 `pyarrow`/`fastparquet` 均未安装，`write_snapshot(fmt="parquet")` 与 `load_snapshot_file` 遇到 parquet 会抛 `ParquetEngineMissingError`。C-2 已确认格式为 CSV/Parquet，但 V4.0 本批只交付 CSV | `src/riskqa/data/snapshot.py`；`docs/constraints.md` §三（单文件 ≤500MB、100 万—500 万行） | T-4.0.5 已定：`requirements.txt` 不含 pyarrow（R16 未批准），Parquet 继续显式抛错；待 V4.1 前评估；来源：T-4.0.4 → T-4.0.5 | 运维/你 |
+| 20 | GitHub 仓库是否允许保持公开？公开仓库的 Actions 日志与门禁输出是否可对外可见？ | `.github/workflows/ci.yml`；T-4.0.7 A 方案 | 不擅自变更远端可见性；CI 只运行 demo 合成数据、测试与文档校验，确认前不接真实指标、raw log 或密钥；若日志不允许公开，应先转私有仓库再使用 Actions | 你 |
 
 ---
 

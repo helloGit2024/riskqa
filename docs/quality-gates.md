@@ -69,52 +69,17 @@
 
 ## 四、CI 流水线编排
 
-**现实约束**：内网 Git 服务形态未确认（无公网 CI 可用）。落地上分两步，T-4.0.7 当天实跑后生效。
+**当前载体**：GitHub Actions，实际配置以 `.github/workflows/ci.yml` 为准。push 到 `main`、pull request 与手动触发均运行同一套门禁；不使用 pre-commit 或 pre-push 钩子。
 
-### 4.1 第一步：pre-commit（本地闸，今天就能装）
+CI 使用 Python 3.13，安装 `requirements.lock.txt` 后执行 `make ci`。本地也用 `make ci` 复现，目标顺序为：
 
-```yaml
-# .pre-commit-config.yaml（T-4.0.7 落地；make target 自带"未建成"守卫，不会静默失败）
-repos:
-  - repo: local
-    hooks:
-      - id: docs-check
-        name: 文档自检（QG-06）
-        entry: make docs-check
-        language: system
-        pass_filenames: false
-      - id: secret-scan
-        name: 密钥扫描（QG-04）
-        entry: make secret-scan
-        language: system
-        pass_filenames: false
-      - id: semantic-check
-        name: 语义层校验（QG-03）
-        entry: make semantic-check
-        language: system
-        pass_filenames: false
-```
+1. `docs-check` + `openq`（QG-06）；
+2. `secret-scan`（QG-04）；
+3. `lint`（QG-05，含 ruff check 与 format check）；
+4. `semantic-check` + `governance-check`（QG-03）；
+5. `test`（QG-01/02）。
 
-### 4.2 第二步：内网 Git webhook CI（示意，等服务确认）
-
-```yaml
-# .gitlab-ci.yml 或内网等效物（示意——AI 可直接实现）
-stages: [check, test]
-variables:
-  PY: "python3"
-docs-check:      # QG-06
-  script: ["make docs-check", "make openq"]
-secret-scan:     # QG-04
-  script: ["make secret-scan"]
-lint:            # QG-05
-  script: ["make lint"]
-test:            # QG-01/02
-  script: ["make test"]
-semantic-check:  # QG-03
-  script: ["make semantic-check", "make governance-check"]
-```
-
-> **顺序纪律**：QG-04/05/06 是快闸（秒级），先跑；QG-01/02 慢闸（分钟级）后跑。CI 红一次要**故意用失败提交验证门禁会拦**（T-4.0.7 验收标准）——没拦过的门禁等于没有。
+> **顺序纪律**：QG-04/05/06 是快闸，先跑；QG-01/02 慢闸后跑。门禁必须做故意失败验证，确认失败会返回非零状态并阻断交付（T-4.0.7 验收标准）——没拦过的门禁等于没有。
 
 ---
 
@@ -134,6 +99,12 @@ semantic-check:  # QG-03
 
 | 门禁 | 当前 | 更新日期 |
 |---|---|---|
-| QG-06 | ✅ 首跑 0 ERROR（2026-11-01，带 pyyaml 的 Python 实跑：2 个 YAML 全部解析通过、阻塞项 0、无 ⚙️ 残留；系统 python3 缺 pyyaml 时会跳过 YAML 检查并报 1 个 WARN，装 requirements 后消失） | 2026-11-01 |
-| QG-01/02/03/04/05 | 未首跑（等 T-4.0.7，代码落地当天实跑；守卫已实跑验证：`make test`/`semantic-check`/`secret-scan` 均正确指路任务编号） | 2026-11-01 |
+| QG-01 | ✅ `51 passed, 1 xfailed`，0 skip | 2026-11-04 |
+| QG-02 | 🟡 场景测试 17/17 通过（V2 九 + V3 八）；legacy 输出留档比对待 T-4.0.10 完成 | 2026-11-04 |
+| QG-03 | ✅ 5 指标 / 3 维度 / 2 表校验通过；治理护栏校验通过 | 2026-11-04 |
+| QG-04 | ✅ `git grep` 扫描全部已跟踪文件，0 命中 | 2026-11-04 |
+| QG-05 | ✅ ruff check 0 问题；57 个 Python 文件格式检查通过 | 2026-11-04 |
+| QG-06 | ✅ 0 ERROR、0 WARN；5 个 YAML 解析通过；自动待确认项 0 处 | 2026-11-04 |
 | QG-07/08/09 | 未到版本（V4.1/V4.1/V4.2 生效；`make eval` 守卫已实跑，指路 T-4.1.8） | — |
+
+> 2026-11-04 本地 `make ci` 首跑通过。GitHub Actions 工作流已接入，线上结果应单独查询，不能用本地结果替代。
