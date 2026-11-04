@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """存储层冒烟：建表幂等、append-only、保留期、SqliteFactStore 往返。"""
 
 from __future__ import annotations
@@ -22,9 +21,15 @@ def test_init_db_is_idempotent(db_conn):
 
 def test_query_log_is_append_only_except_signature_backfill(db_conn):
     repo = QueryLogRepo(db_conn)
-    repo.insert(qid="Q0001", question="各渠道逾期", sql="SELECT 1 LIMIT 1",
-                result_digest={"value": 0.2}, user="u01", dept="风险策略部",
-                ts="2025-01-01 00:00:00")
+    repo.insert(
+        qid="Q0001",
+        question="各渠道逾期",
+        sql="SELECT 1 LIMIT 1",
+        result_digest={"value": 0.2},
+        user="u01",
+        dept="风险策略部",
+        ts="2025-01-01 00:00:00",
+    )
 
     with pytest.raises(sqlite3.IntegrityError, match="P-12"):
         db_conn.execute("UPDATE query_log SET question='changed' WHERE qid='Q0001'")
@@ -36,10 +41,24 @@ def test_query_log_is_append_only_except_signature_backfill(db_conn):
 
 def test_retention_only_deletes_old_rows(db_conn):
     repo = QueryLogRepo(db_conn)
-    repo.insert(qid="Q-OLD", question="q", sql="SELECT 1 LIMIT 1",
-                result_digest={}, user="u", dept="d", ts="2025-01-01 00:00:00")
-    repo.insert(qid="Q-NEW", question="q", sql="SELECT 1 LIMIT 1",
-                result_digest={}, user="u", dept="d", ts="2026-10-01 00:00:00")
+    repo.insert(
+        qid="Q-OLD",
+        question="q",
+        sql="SELECT 1 LIMIT 1",
+        result_digest={},
+        user="u",
+        dept="d",
+        ts="2025-01-01 00:00:00",
+    )
+    repo.insert(
+        qid="Q-NEW",
+        question="q",
+        sql="SELECT 1 LIMIT 1",
+        result_digest={},
+        user="u",
+        dept="d",
+        ts="2026-10-01 00:00:00",
+    )
 
     deleted = purge_query_log(db_conn, days=365, today="2026-10-30 00:00:00")
     assert deleted == 1
@@ -62,8 +81,12 @@ def test_sqlite_fact_store_roundtrip_and_nan_rejection(db_conn):
     assert fid == "F0001"
 
     fact = store.get(fid)
-    assert (fact.fid, fact.value, fact.metric, fact.segment) == \
-        ("F0001", 0.5, "pass_rate", "overall")
+    assert (fact.fid, fact.value, fact.metric, fact.segment) == (
+        "F0001",
+        0.5,
+        "pass_rate",
+        "overall",
+    )
     assert fact.data_as_of == "2026-09-30"
     assert store.manifest()["count"] == 1
     assert len(store.manifest()["sha256"]) == 64

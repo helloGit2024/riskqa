@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
 """校验闸单测：裸数字 / 编造引用 / 重算不一致。"""
 
 from __future__ import annotations
-
-import pytest
 
 from riskqa.facts.store import FactStore
 from riskqa.verify.gates import verify_report

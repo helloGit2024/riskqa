@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """治理层单测：SQL 归一、口径指纹、热度与提名。"""
 
 from __future__ import annotations
@@ -18,18 +17,19 @@ TODAY = "2026-10-30"
 
 
 def test_normalize_sql_replaces_literals_and_collapses_whitespace():
-    sql = ("SELECT  product, AVG(is_fpd30) AS v\nFROM t WHERE product='A' "
-           "AND is_pass=1 GROUP BY product LIMIT 10")
+    sql = (
+        "SELECT  product, AVG(is_fpd30) AS v\nFROM t WHERE product='A' "
+        "AND is_pass=1 GROUP BY product LIMIT 10"
+    )
     assert normalize_sql(sql) == (
         "SELECT product, AVG(is_fpd30) AS v FROM t "
-        "WHERE product=? AND is_pass=? GROUP BY product LIMIT ?")
+        "WHERE product=? AND is_pass=? GROUP BY product LIMIT ?"
+    )
 
 
 def test_caliber_fingerprint_ignores_parameter_variants():
-    a = ("SELECT product, AVG(is_fpd30) FROM t WHERE product='A' "
-         "GROUP BY product LIMIT 10")
-    b = ("SELECT product, AVG(is_fpd30) FROM t WHERE product='B' "
-         "GROUP BY product LIMIT 10")
+    a = "SELECT product, AVG(is_fpd30) FROM t WHERE product='A' GROUP BY product LIMIT 10"
+    b = "SELECT product, AVG(is_fpd30) FROM t WHERE product='B' GROUP BY product LIMIT 10"
     assert caliber_fingerprint(a) == caliber_fingerprint(b) == "AVG(is_fpd30) # product=?"
 
     no_where = "SELECT product, AVG(is_fpd30) FROM t GROUP BY product LIMIT 10"

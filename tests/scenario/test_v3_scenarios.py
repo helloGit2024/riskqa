@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 八场景迁移（来源：legacy/问数Agent_持续运营V3.py L610—L710）。
 
 golden 值冻结于 2026-11-04、pandas 2.2.3；测试不 import legacy。
@@ -35,15 +34,19 @@ def clusters(semantic, query_logs):
 
 def _promote_loan(clusters, semantic) -> SemanticLayer:
     loan = next(c for c in clusters.values() if c.sig.metric == "loan_amt")
-    rec = ReviewRecord("R-2026-090", loan.sig.key(), "风控策略组·王五", "promote",
-                       next(iter(loan.sql_variants)),
-                       "口径确认：放款量=SUM(loan_amt)，分母不适用，维度=产品",
-                       "2026-10-30")
+    rec = ReviewRecord(
+        "R-2026-090",
+        loan.sig.key(),
+        "风控策略组·王五",
+        "promote",
+        next(iter(loan.sql_variants)),
+        "口径确认：放款量=SUM(loan_amt)，分母不适用，维度=产品",
+        "2026-10-30",
+    )
     return SemanticLayer(promote(loan, rec, semantic, TODAY))
 
 
-def test_v3_1_governance_three_layers_and_guardrails(
-        governance_text, governance_cfg):
+def test_v3_1_governance_three_layers_and_guardrails(governance_text, governance_cfg):
     """场景一：治理三层配置——域覆盖 + 临时调整生效，护栏拦截非法阈值。"""
     raw = yaml.safe_load(governance_text)
     assert raw["global"]["promotion"]["min_users"] == 3
@@ -51,11 +54,12 @@ def test_v3_1_governance_three_layers_and_guardrails(
     assert raw["global"]["retention_days"] == 365
     assert raw["global"]["review"]["sla_hours"] == 72
 
-    assert governance_cfg.promotion.min_users == 2          # 临时调低在 TODAY 生效
+    assert governance_cfg.promotion.min_users == 2  # 临时调低在 TODAY 生效
     assert governance_cfg.window_days == 30
     assert governance_cfg.retention_days == 365
-    assert governance_cfg.for_domain(
-        "collection_ops", raw["overrides"]).min_users == 5  # 第二层主题域覆盖
+    assert (
+        governance_cfg.for_domain("collection_ops", raw["overrides"]).min_users == 5
+    )  # 第二层主题域覆盖
 
     bad = copy.deepcopy(raw)
     bad["global"]["window_days"] = 400
@@ -128,8 +132,7 @@ def test_v3_5_review_material_has_panorama_and_decision_question(clusters, seman
     lines = material.splitlines()
 
     assert lines[0] == "# 待评审指标：fpd30_rate"
-    assert lines[1] == ("## 全景（93 次查询，10 位用户，28 天，"
-                        "8 种问法，3 个签名，2 种口径）")
+    assert lines[1] == ("## 全景（93 次查询，10 位用户，28 天，8 种问法，3 个签名，2 种口径）")
     assert "需要你裁决的问题" in material
     assert material.count("⚠️") == 1
     assert "查询记录 QID：" in material
@@ -139,12 +142,19 @@ def test_v3_6_promotion_signs_yaml_and_requires_calc_registration(clusters, sema
     """场景六：晋升签字——写 YAML + evidence 快照 + alias 回填；纯函数未注册拒算。"""
     new_yaml = promote(
         next(c for c in clusters.values() if c.sig.metric == "loan_amt"),
-        ReviewRecord("R-2026-090", "loan_amt|product|product|all",
-                     "风控策略组·王五", "promote",
-                     "SELECT product, SUM(loan_amt) AS v FROM fact_application "
-                     "WHERE product='A' GROUP BY product LIMIT 10",
-                     "口径确认：放款量=SUM(loan_amt)", "2026-10-30"),
-        semantic, TODAY)
+        ReviewRecord(
+            "R-2026-090",
+            "loan_amt|product|product|all",
+            "风控策略组·王五",
+            "promote",
+            "SELECT product, SUM(loan_amt) AS v FROM fact_application "
+            "WHERE product='A' GROUP BY product LIMIT 10",
+            "口径确认：放款量=SUM(loan_amt)",
+            "2026-10-30",
+        ),
+        semantic,
+        TODAY,
+    )
     parsed = yaml.safe_load(new_yaml)
     assert parsed["version"] == semantic.version
     entry = next(m for m in parsed["metrics"] if m["name"] == "loan_amt")
@@ -174,8 +184,7 @@ def test_v3_7_review_escalation_chain_to_shelved(clusters, governance_cfg):
     """场景七：评审升级链——SLA 72h → 2× 升级 → 7× 组织搁置。"""
     state = ReviewState("loan_amt|product|product|all", entered_at="2026-10-01")
     seen = []
-    for now in ["2026-10-03 09:00", "2026-10-05 09:00",
-                "2026-10-09 09:00", "2026-10-25 09:00"]:
+    for now in ["2026-10-03 09:00", "2026-10-05 09:00", "2026-10-09 09:00", "2026-10-25 09:00"]:
         tick(state, now, governance_cfg.review)
         seen.append(state.status)
 
@@ -197,8 +206,11 @@ def test_v3_8_promoted_aliases_hit_natural_questions(clusters, semantic):
 
 def _loan_demo_frame():
     import pandas as pd
-    return pd.DataFrame({
-        "loan_amt": [120.5, 380.0, 95.5],
-        "is_pass": [1, 1, 1],
-        "product": ["A", "B", "A"],
-    })
+
+    return pd.DataFrame(
+        {
+            "loan_amt": [120.5, 380.0, 95.5],
+            "is_pass": [1, 1, 1],
+            "product": ["A", "B", "A"],
+        }
+    )

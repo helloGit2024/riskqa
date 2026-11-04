@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """计算层纯函数单测：分母口径、分组 NaN、已知退化边界。"""
 
 from __future__ import annotations
@@ -43,13 +42,15 @@ def test_compute_metric_grouped_keeps_nan_group():
 
     是否让整条问数失败由装配层决定；store 层拒收 NaN（见 test_store_smoke）。
     """
-    df = pd.DataFrame({
-        "product": ["A", "A", "B"],
-        "is_pass": [1, 1, 0],
-        "is_fpd30": [1, 0, 0],
-    })
+    df = pd.DataFrame(
+        {
+            "product": ["A", "A", "B"],
+            "is_pass": [1, 1, 0],
+            "is_fpd30": [1, 0, 0],
+        }
+    )
     result = compute_metric("fpd30_rate", df, group_by="product")
-    values = dict(zip(result["product"], result["value"]))
+    values = dict(zip(result["product"], result["value"], strict=True))
     assert values["A"] == pytest.approx(0.5)
     assert np.isnan(values["B"])
 

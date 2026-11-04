@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """pytest 公共夹具：路径注入、演示数据、配置、FakeLLM 与临时存储。
 
 数据基线全部固定（seed 与日期），测试不依赖 datetime.now()：
@@ -39,8 +38,7 @@ def repo_root() -> Path:
 
 @pytest.fixture(scope="session")
 def semantic() -> SemanticLayer:
-    return SemanticLayer(
-        (REPO_ROOT / "config" / "semantic_view.yaml").read_text(encoding="utf-8"))
+    return SemanticLayer((REPO_ROOT / "config" / "semantic_view.yaml").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="session")
@@ -71,14 +69,21 @@ def demo_df() -> pd.DataFrame:
     y = (rng.random(n) < (0.38 - 0.32 * score_v3)).astype(int)
     bad_p = np.where(channels == "B", 0.45, 0.25)
     is_fpd30 = np.where(is_pass == 1, (rng.random(n) < bad_p).astype(int), 0)
-    return pd.DataFrame({
-        "apply_id": [f"AP{i:05d}" for i in range(n)],
-        "customer_id": [f"C{i:05d}" for i in range(n)],
-        "channel": channels, "product": products, "vintage": vintage,
-        "is_pass": is_pass, "is_fpd30": is_fpd30,
-        "score": score_v3.round(4), "score_v3": score_v3.round(4),
-        "score_v2": score_v2.round(4), "y": y,
-    })
+    return pd.DataFrame(
+        {
+            "apply_id": [f"AP{i:05d}" for i in range(n)],
+            "customer_id": [f"C{i:05d}" for i in range(n)],
+            "channel": channels,
+            "product": products,
+            "vintage": vintage,
+            "is_pass": is_pass,
+            "is_fpd30": is_fpd30,
+            "score": score_v3.round(4),
+            "score_v3": score_v3.round(4),
+            "score_v2": score_v2.round(4),
+            "y": y,
+        }
+    )
 
 
 def _gen_logs(n: int = 200) -> list[QueryLog]:
@@ -87,7 +92,7 @@ def _gen_logs(n: int = 200) -> list[QueryLog]:
     来源：legacy/问数Agent_持续运营V3.py L539—L600（gen_logs），原文复制；
     实际产出 199 条（n=200 时全部返回）。基线 2026-11-04，pandas 2.2.3。
     """
-    rng = random.Random(42)
+    rng = random.Random(42)  # noqa: S311  # 测试数据固定 seed，非安全随机
     users = [f"u{i:02d}" for i in range(1, 11)]
     logs: list[QueryLog] = []
     qn = 0
@@ -95,43 +100,68 @@ def _gen_logs(n: int = 200) -> list[QueryLog]:
     def add(q, sql, user, day, edited=False, conf=("u00",)):
         nonlocal qn
         qn += 1
-        logs.append(QueryLog(f"Q{qn:04d}", q, sql, edited,
-                             {"value": 0.2}, user, "风险策略部", day, conf))
+        logs.append(
+            QueryLog(f"Q{qn:04d}", q, sql, edited, {"value": 0.2}, user, "风险策略部", day, conf)
+        )
 
-    c1_questions = ["各渠道 FPD30 怎么样", "按渠道看首期逾期", "渠道维度逾期率",
-                    "各渠道 FPD30", "按渠道看首期逾期情况"]
+    c1_questions = [
+        "各渠道 FPD30 怎么样",
+        "按渠道看首期逾期",
+        "渠道维度逾期率",
+        "各渠道 FPD30",
+        "按渠道看首期逾期情况",
+    ]
     for i in range(47):
-        add(c1_questions[i % len(c1_questions)],
+        add(
+            c1_questions[i % len(c1_questions)],
             "SELECT channel, AVG(is_fpd30) AS v FROM fact_application "
             "WHERE is_pass=1 GROUP BY channel LIMIT 10",
-            users[i % 8], f"2026-10-{(i % 23) + 1:02d}",
-            edited=(i % 11 == 0), conf=(users[(i + 1) % 8],))
+            users[i % 8],
+            f"2026-10-{(i % 23) + 1:02d}",
+            edited=(i % 11 == 0),
+            conf=(users[(i + 1) % 8],),
+        )
     for i in range(16):
-        add(["渠道逾期率看一下", "分渠道首期逾期"][i % 2],
-            "SELECT channel, AVG(is_fpd30) AS v FROM fact_application "
-            "GROUP BY channel LIMIT 10",
-            users[8 + (i % 2)], f"2026-10-{(i % 20) + 3:02d}", conf=("u09",))
+        add(
+            ["渠道逾期率看一下", "分渠道首期逾期"][i % 2],
+            "SELECT channel, AVG(is_fpd30) AS v FROM fact_application GROUP BY channel LIMIT 10",
+            users[8 + (i % 2)],
+            f"2026-10-{(i % 20) + 3:02d}",
+            conf=("u09",),
+        )
     for i in range(30):
-        add("按产品看逾期", "SELECT product, AVG(is_fpd30) AS v FROM fact_application "
+        add(
+            "按产品看逾期",
+            "SELECT product, AVG(is_fpd30) AS v FROM fact_application "
             "WHERE is_pass=1 GROUP BY product LIMIT 10",
             "u03" if i < 25 else users[(i + 3) % 8],
-            f"2026-10-{(i % 28) + 1:02d}")
+            f"2026-10-{(i % 28) + 1:02d}",
+        )
     for i in range(12):
-        add("各渠道通过率", "SELECT channel, AVG(is_pass) AS v FROM fact_application "
-            "GROUP BY channel LIMIT 10",
-            users[i % 6], f"2026-10-{5 + (i % 2):02d}")
+        add(
+            "各渠道通过率",
+            "SELECT channel, AVG(is_pass) AS v FROM fact_application GROUP BY channel LIMIT 10",
+            users[i % 6],
+            f"2026-10-{5 + (i % 2):02d}",
+        )
     for i in range(2):
-        add("vintage 维度通过率", "SELECT vintage, AVG(is_pass) AS v FROM fact_application "
-            "GROUP BY vintage LIMIT 10",
-            users[i * 3], f"2026-10-{i * 9 + 1:02d}")
+        add(
+            "vintage 维度通过率",
+            "SELECT vintage, AVG(is_pass) AS v FROM fact_application GROUP BY vintage LIMIT 10",
+            users[i * 3],
+            f"2026-10-{i * 9 + 1:02d}",
+        )
     c6_products = ["A", "B", "C"]
     for i in range(92):
         p = c6_products[i % 3]
         tw = ["最近一个月", "最近一年"][i % 2]
-        add(f"{p}产品放款量{tw}",
-            f"SELECT product, SUM(loan_amt) AS v FROM fact_application "
+        add(
+            f"{p}产品放款量{tw}",
+            f"SELECT product, SUM(loan_amt) AS v FROM fact_application "  # noqa: S608  # 测试夹具固定 SQL
             f"WHERE product='{p}' GROUP BY product LIMIT 10",
-            users[(i + 2) % 9], f"2026-10-{(i % 25) + 1:02d}")
+            users[(i + 2) % 9],
+            f"2026-10-{(i % 25) + 1:02d}",
+        )
     rng.shuffle(logs)
     return logs[:n] if n < len(logs) else logs
 
@@ -144,8 +174,10 @@ def query_logs() -> list[QueryLog]:
 @pytest.fixture
 def fake_llm():
     """FakeLLM 脚本工厂：失败场景一律脚本化，不接真模型（P-17）。"""
+
     def _make(script: list[dict]) -> FakeLLM:
         return FakeLLM(script=script)
+
     return _make
 
 
