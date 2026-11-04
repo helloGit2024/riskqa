@@ -29,9 +29,9 @@
 | 8 | 加急通道的具体触发条件？ | V3 文档 §10.1 | 默认"≥5 独立用户或管理层问过"；首次复盘会校准 | 你 |
 | 9 | 内网 pip 源是否可用？ | assumptions A-07 | 按公司内网源写 requirements；装不上先 vendor 到 `third_party/` | 运维 |
 | 10 | 回测场景的 OOT 数据从哪来？ | releases V4.3 | V4.0—V4.2 不依赖；V4.3 启动时确认 | 模型团队 |
-| 11 | legacy V3 的 `row_policies` 是扁平字符串（如 `{'analyst_qa': "channel IN (...)"}`），而 `row_filter(role, table)` 按两层字典读取，运行必抛 `AttributeError: 'str' object has no attribute 'get'`；影响行级权限（P-10）实际不可用 | legacy V3 内嵌 `GOVERNANCE_YAML` 的 `row_policies`；B1 迁移后的 `src/riskqa/semantic/layer.py` | 原样保留（行为等价迁移，未修）；T-4.0.2 外置 YAML 时规范为 `{role: {table: 条件}}` 两层结构并补回归测试；来源：B1 行为等价迁移时发现 | 你 |
 | 12 | `normalize_missing` 两版实现不同：金融版按列替换 `{"": NaN, "unknown": NaN, "Unknown": NaN}` 并全表替换 `-999`；V2 为 `df.replace(["", "unknown", -999], np.nan)`。金融版处理 `"Unknown"` 但不处理 pandas string 空串，V2 反之。B2 迁移取金融版，故在 pandas string dtype 下空串行为与 V2 原版不同 | legacy 金融版 / V2 的 `normalize_missing`；B2 迁移后的 `src/riskqa/data/snapshot.py` | 保留金融版（行为等价迁移，未修）；默认路径：T-4.0.6 写测试固化预期（`"Unknown"` 归一、`"unknown"` 归一、pandas string 空串按所选版本行为断言）；来源：B2 行为等价迁移时发现 | 你 |
 | 13 | 金融版 `dispatch` 与 V2 选型的计算/事实层接口不匹配：非分组同一输入旧值 `0.4`（金融版 `CALC` 对 `y` 求均值）vs 新值 `0.3333`（V2 `fpd30_rate` 按 `is_pass/is_fpd30`）；分组路径在本机 pandas 2.0.3 触发 `include_groups` TypeError，升到 pandas ≥2.2 后仍会因 V2 `compute_metric` 无 `dim` 列与 `FactStore.put` 第 4 位置参映射到 `segment` 报错，影响快路分维度查询（`tools/dispatch.py` 已按原样迁移，未适配） | legacy 金融版 `dispatch` / V2 的 `compute_metric`、`FactStore`；B3 迁移后的 `src/riskqa/tools/dispatch.py` | 原样保留（行为等价迁移，未修）；默认路径：T-4.0.6 写测试固化预期，或在 T-4.0.2 统一计算/事实层接口时一并处理；来源：B3 行为等价迁移时发现 | 你 |
+| 14 | `config/governance.yaml` 的 `overrides`（主题域覆盖层）会被 `load_governance` 丢弃：`GovernanceConfig.for_domain(domain, overrides)` 需要调用方另行传入 overrides，而非从配置对象读取 | `config/governance.yaml` 的 `overrides`；`src/riskqa/governance/config.py` | 保留数据层但不消费（外置原样迁移）；默认路径：V4.2 治理三层接入时把 overrides 挂到 `GovernanceConfig` 或改由加载器返回；来源：T-4.0.2 | 你 |
 
 ---
 
@@ -44,6 +44,7 @@
 | C-3 | LLM 怎么接？ | 统一网关，本地模型优先，数据不出内网 | 2026-11-01 |
 | C-4 | 协作档？ | C0（一个人 + AI 提交） | 2026-11-01 |
 | C-5 | 归因/回测是否沉淀 SQL 为语义层指标？ | 否（V3 已确认边界：只做指标问数运营化） | 2026-11-01 |
+| C-6 | （原 #11）`row_policies` 扁平字符串导致 `row_filter(role, table)` 抛 `AttributeError`，行级权限不可用 | 随 T-4.0.2 外置 YAML 时规范为 `{role: {table: 条件}}` 两层结构；`semantic-check` 增加结构断言，扁平常量会被拒绝 | 2026-11-04 |
 
 ---
 
