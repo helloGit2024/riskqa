@@ -78,12 +78,13 @@ alwaysApply: true
 - SQLite 六表 + store 层
 - tests/ pytest 化（V2 九场景 + V3 八场景）
 - Makefile + CI 门禁
+- 现有四个 .py 文件移入 `legacy/` 存档（只读参照，不删除）
 
 ### ❌ 本版本明确不做
 - 不接真 LLM（FakeLLM/规则抽取器）
 - 不做 API / MCP（V4.1/V4.2）
 - 不加新指标、不改任何计算逻辑
-- 不做前端
+- 不做自研前端
 
 ### 其他版本的范围
 `docs/releases.md` 是版本范围的**唯一事实来源**。本文件只写"当前这一版"。
