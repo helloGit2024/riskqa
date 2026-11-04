@@ -1,0 +1,5 @@
+# 开发依赖（含运行依赖）
+-r requirements.txt
+
+pytest==8.4.2          # 8.x 锁定（T-4.0.6 场景/单元测试）
+ruff==0.17.3           # lint / format --check（T-4.0.7 门禁）

@@ -1,0 +1,15 @@
+# 运行依赖 · V4.0（Python 3.13）
+# 版本依据 AGENTS.md 第二节技术栈；全部锁死，升级须走 ADR / R16 流程
+
+# --- 计算与配置（V4.0 实际使用） ---
+pandas==2.2.3          # 2.x 锁定；include_groups=False 需 >=2.2
+numpy==2.2.6           # 与 pandas 2.2.3 配对（pandas 2.2.2+ 支持 NumPy 2）
+PyYAML==6.0.3          # 语义层 / 治理配置加载
+langgraph==1.2.19      # 慢路固定图 + interrupt 人审（1.2.x）
+# langgraph 会带入 langchain-core / langgraph-checkpoint / langgraph-sdk，
+# 全量闭环见 requirements.lock.txt
+
+# --- 出口预留：V4.1 API / V4.2 MCP 启用，V4.0 不 import ---
+fastapi==0.115.14      # 0.11x 系列（AGENTS 技术栈）
+uvicorn==0.54.0        # Makefile run 的 ASGI 服务器
+mcp==1.30.0            # 官方 MCP SDK 1.x（AGENTS 技术栈）
