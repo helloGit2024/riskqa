@@ -1,0 +1,21 @@
+# 治理配置 · 三层参数（P-14/P-15）
+# 取值来源：legacy V3 GOVERNANCE_YAML，原文照录，未改动任何数值。
+global:
+  promotion:
+    min_users: 3
+    min_queries: 5
+    min_days: 5
+    max_top_user_share: 0.8
+    max_active_days_gap: 2
+  window_days: 30
+  retention_days: 365
+  review:
+    sla_hours: 72
+    escalate_after_sla: 2
+    shelve_after_sla: 7
+overrides:
+  collection_ops:
+    promotion: {min_users: 5}
+temporary:
+  - {param: global.promotion.min_users, value: 2,
+     reason: "双十一期间临时放宽", by: "值班人·李四", expires: "2026-11-15"}

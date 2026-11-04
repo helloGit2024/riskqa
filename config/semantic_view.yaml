@@ -1,0 +1,68 @@
+# 语义层 · 口径唯一事实源（P-15）
+# 字段与取值来源：legacy V2 SEMANTIC_YAML（基线）+ V3 的 fpd30_rate 描述与 base_table。
+version: "2.0"
+
+metrics:
+  - name: fpd30_rate
+    desc: "首期逾期率：放款客户中首期 DPD30+ 的占比（分母=放款户，宽限期 3 天）"
+    unit: ratio
+    dims: [channel, product, vintage]
+    calc: fpd30_rate
+    aliases: [fpd30, 首期逾期率, 首期逾期]
+    owner: 风控策略组
+    signed_at: "2026-09-30"
+    changelog:
+      - {date: "2026-09-30", version: v1.0, note: "初版：放款后30天DPD30+，宽限期3天"}
+  - name: pass_rate
+    desc: "通过率：审批通过申请数 / 提交申请数（分母口径：提交数，非通过数）"
+    unit: ratio
+    dims: [channel, product, vintage]
+    calc: pass_rate
+    aliases: [通过率, pass]
+    owner: 风控策略组
+    signed_at: "2026-09-30"
+    changelog:
+      - {date: "2026-09-30", version: v1.0, note: "初版：分母=提交申请数"}
+  - name: ks
+    desc: "KS：好坏样本累计分布差的最大值（score 降序）"
+    unit: ratio
+    dims: [vintage]
+    calc: ks
+    owner: 模型组
+    signed_at: "2026-09-30"
+    changelog:
+      - {date: "2026-09-30", version: v1.0, note: "初版：OOT 样本上计算"}
+  - name: auc
+    desc: "AUC：ROC 曲线下面积"
+    unit: ratio
+    dims: [vintage]
+    calc: auc
+    owner: 模型组
+    signed_at: "2026-09-30"
+    changelog: []
+  - name: psi
+    desc: "PSI：分数分布稳定性（期望 vs 实际，10 等宽分箱）"
+    unit: ratio
+    dims: [vintage]
+    calc: psi
+    owner: 模型组
+    signed_at: "2026-09-30"
+    changelog: []
+
+# 慢路可用表白名单：text-to-SQL 只能在这些表里选，且必须带口径上下文
+tables:
+  - name: fact_application
+    desc: "申请事实表（清洗后）"
+    base_table: dwd.fact_application
+    columns: [apply_id, customer_id, channel, product, vintage, is_pass, is_fpd30, score]
+    risk_level: high
+  - name: dim_channel
+    desc: "渠道维度表"
+    columns: [channel, channel_name, region]
+    risk_level: low
+
+# 行级数据权限：角色 → 表 → 注入条件（两层结构，P-10；修 OPEN-QUESTIONS #11）
+row_policies:
+  analyst_qa:
+    fact_application: "channel = 'A'"
+  risk_admin: {}
