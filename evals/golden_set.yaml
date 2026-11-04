@@ -1,0 +1,278 @@
+# 评估题库（冻结，不许为了让评估通过而修改）
+#
+# ★ 两条硬纪律：
+#   1. 必须能解析（顶层是 mapping，不是 list）—— 用 scripts/validate_docs.py 自检
+#   2. 改任何一条都必须先升 meta.version，并在备注里写清"从版本 X 起生效"
+#
+# ★ 比什么：比"结果集"，不比"答案文本 / SQL 文本"。
+#   列序无关、行序无关、列名不参与比对、数值给容差。否则同样正确的答案会因为格式被判错。
+#
+# ★ 期望值来源：全部由 evals/seed.sql 上的 Python 纯函数（legacy V2 计算层，T-4.0.1 迁入
+#   src/riskqa/calc/）计算得出，2026-11-01 留档。不是 LLM 自评，不是手填。
+
+meta:
+  version: 0.1.0
+  frozen_at: "2026-11-01"
+  frozen_now: "2026-11-01T10:00:00"   # ★ 时间冻结：所有相对时间（上个月/昨天）都以这个时刻为基准
+  seed_file: "evals/seed.sql"
+  tolerance: 1.0e-6                   # 数值容差（result_set 比对用）
+  notes: |
+    初始 20 题 = 10 正常（快路 9 + 慢路 1）+ 6 对抗口径 + 4 拒答。
+    种子数据：evals/seed.sql（fact_application 1200 行 + dim_channel 3 行），
+    由 legacy 问数Agent_企业版V2.py 演示数据生成器（numpy seed=42, n=1200）落库，
+    T-4.1.8 建 runner 时先用纯函数复跑一遍期望值（复现失败 = 题库作废重冻结）。
+    已登记指标 5 个：fpd30_rate / pass_rate / ks / auc / psi（口径见 config/semantic_view.yaml，
+    T-4.0.2 外置后以 YAML 为准）。
+    评分分工：result_set 类走机器规则比对（数字硬指标，零成本）；refusal 类 runner 先机器
+    预筛（无 result_set + 拒答标记），人工终判——见 evals/README §三 与 judge-prompt §四。
+
+items:
+
+  # ==================== 正常题（10） ====================
+
+  - id: Q001
+    category: functional
+    route: fast
+    question: "整体 FPD30 是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {channel: null, value: 0.285904}
+    scoring: auto
+    notes: 快路基准题：命中语义层 → enum 收窄 → 纯函数计算。分母=放款户（is_pass=1，752 户）。
+
+  - id: Q002
+    category: functional
+    route: fast
+    question: "各渠道 FPD30 怎么样？"
+    expected:
+      type: result_set
+      rows:
+        - {channel: A, value: 0.223919}
+        - {channel: B, value: 0.424528}
+        - {channel: C, value: 0.251701}
+    scoring: auto
+    notes: 快路分组题：dims=[channel,product,vintage] 内的合法维度。B 渠道显著高于 A/C（数据构造使然，回归基线）。
+
+  - id: Q003
+    category: functional
+    route: fast
+    question: "首期逾期率多少？"
+    expected:
+      type: result_set
+      rows:
+        - {channel: null, value: 0.285904}
+    scoring: auto
+    notes: 考 alias 归一："首期逾期率" → fpd30_rate（语义层 aliases 字段）。与 Q001 同值不同问法。
+
+  - id: Q004
+    category: functional
+    route: fast
+    question: "各产品通过率是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {product: P1, value: 0.625337}
+        - {product: P2, value: 0.628821}
+    scoring: auto
+    notes: 快路分组题：pass_rate 按 product 拆。口径分母=提交申请数（全量 1200 行内的均值）。
+
+  - id: Q005
+    category: functional
+    route: fast
+    question: "2026-08 的 KS 是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {vintage: "2026-08", value: 0.254183}
+    scoring: auto
+    notes: 快路带 time_range 过滤：vintage=2026-08（623 行）。KS 口径=score 降序累计分布差最大值。
+
+  - id: Q006
+    category: functional
+    route: fast
+    question: "整体 AUC 是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {channel: null, value: 0.411955}
+    scoring: auto
+    notes: 模型组指标（owner=模型组）也要能走同一条问数链路。
+
+  - id: Q007
+    category: functional
+    route: fast
+    question: "整体 PSI 是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {channel: null, value: 0.20766}
+    scoring: auto
+    notes: PSI 口径：期望 vs 实际，10 等宽分箱。
+
+  - id: Q008
+    category: functional
+    route: fast
+    question: "FPD30 按渠道和产品拆一下"
+    expected:
+      type: result_set
+      rows:
+        - {channel: A, product: P1, value: 0.243902}
+        - {channel: A, product: P2, value: 0.190476}
+        - {channel: B, product: P1, value: 0.414286}
+        - {channel: B, product: P2, value: 0.444444}
+        - {channel: C, product: P1, value: 0.24359}
+        - {channel: C, product: P2, value: 0.26087}
+    scoring: auto
+    notes: 双维分组（channel × product，6 组）。注意 C×P2 仅 94 行——小样本不拒算，但口径返回里带 n。
+
+  - id: Q009
+    category: functional
+    route: slow
+    question: "各渠道的申请量是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {channel: A, cnt: 602}
+        - {channel: B, cnt: 358}
+        - {channel: C, cnt: 240}
+    scoring: auto
+    notes: 慢路基准题："申请量"不是已登记指标 → text-to-SQL（SELECT channel, COUNT(*) GROUP BY channel）→ 三闸 → 结果进 FactStore。期望 = 事实表行数。
+
+  - id: Q010
+    category: functional
+    route: fast
+    question: "2026-07 和 2026-08 的 FPD30 分别是多少？"
+    expected:
+      type: result_set
+      rows:
+        - {vintage: "2026-07", value: 0.249315}
+        - {vintage: "2026-08", value: 0.320413}
+    scoring: auto
+    notes: 多值 time_range：两个 vintage 各算一次，不是混在一起算（混算 = 0.285904，FAIL）。
+
+  # ==================== 对抗口径题（6） ====================
+
+  - id: Q011
+    category: domain
+    route: fast
+    question: "算 FPD30 的时候，没放款的客户算进分母吗？"
+    expected:
+      type: answer
+      answer_must_contain: ["放款户"]
+      answer_must_not_contain: ["0.179167"]
+    scoring: auto
+    notes: |
+      签字口径：分母=放款户（is_pass=1），未放款户不进分母（fpd30_rate 函数 docstring 原文）。
+      0.179167 = 把全量 1200 行当分母的错误值，出现即 FAIL——这正是 V3 口径指纹要抓的漂移。
+
+  - id: Q012
+    category: domain
+    route: fast
+    question: "通过率的分母是提交数还是通过数？"
+    expected:
+      type: answer
+      answer_must_contain: ["提交"]
+      answer_must_not_contain: ["1.0", "100%"]
+    scoring: auto
+    notes: |
+      签字口径：分母=提交申请数（desc 原文"分母口径：提交数，非通过数"）。
+      用通过数做分母恒等于 1.0/100%，出现该值即 FAIL。整体通过率 = 0.626667。
+
+  - id: Q013
+    category: domain
+    route: fast
+    question: "KS 用的是 v2 分数还是 v3 分数？整体 KS 是多少？"
+    expected:
+      type: answer
+      answer_must_contain: ["score", "0.159452"]
+      answer_must_not_contain: ["score_v2"]
+    scoring: auto
+    notes: |
+      签字口径：KS 基于 score 列（=score_v3，desc 原文"score 降序"）。整体 KS=0.159452。
+      用 score_v2 计算 = 错误口径（V3 开发期"参数当口径"bug 的回归题）。
+      注意 seed 里 score/score_v3/score_v2 三列并存，是故意留的陷阱。
+
+  - id: Q014
+    category: domain
+    route: fast
+    question: "宽限期内的逾期算 FPD30 吗？"
+    expected:
+      type: answer
+      answer_must_contain: ["宽限期"]
+    scoring: auto
+    notes: |
+      口径细节在 changelog 不在 desc："初版：放款后30天DPD30+，宽限期3天"。
+      考 changelog 引用能力——只背 desc 答不出这题。答"不算/算"均可，但必须援引宽限期口径。
+
+  - id: Q015
+    category: domain
+    route: fast
+    question: "FPD30 按客户年龄拆一下"
+    expected:
+      type: refusal
+      answer_must_contain: ["维度"]
+    scoring: auto
+    notes: |
+      乱拆维度必须拒：年龄不在 dims=[channel,product,vintage]（P-04 精神：enum 收窄之外的参数不算）。
+      正确行为 = 明确拒绝 + 说明已登记维度，不是硬算一个"年龄分组"（V2 失败场景回归）。
+
+  - id: Q016
+    category: domain
+    route: fast
+    question: "整体 FPD30 和整体通过率各是多少？再帮我算下坏账率。"
+    expected:
+      type: answer
+      answer_must_contain: ["0.285904", "0.626667"]
+      answer_must_not_contain: ["坏账率是", "坏账率为", "坏账率：", "坏账率:"]
+    scoring: auto
+    notes: |
+      混合题：两个已登记指标正常答（0.285904 / 0.626667），坏账率未登记 → 拒这一项。
+      正确拒答措辞（如"坏账率未登记，无法计算"）不含禁列内容；编一个坏账率数字 = FAIL（P-04）。
+
+  # ==================== 拒答题（4） ====================
+
+  - id: Q017
+    category: refusal
+    route: fast
+    question: "上个月 FPD30 是多少？"
+    expected:
+      type: refusal
+      answer_must_not_contain: ["0.249315", "0.320413", "0.285904"]
+    scoring: human
+    notes: |
+      时间冻结："上个月"按 frozen_now（2026-11-01）解析为 2026-10；快照 vintage 只有 2026-07/08。
+      无数据必须拒答，不得拿相邻月份的数字冒充（禁列 = 三个已有口径值，出现任一即 FAIL）。
+      runner 先机器预筛（无 result_set + 拒答标记），人工终判。
+
+  - id: Q018
+    category: refusal
+    route: fast
+    question: "AUC 达到多少算合格？行业平均水平是多少？"
+    expected:
+      type: refusal
+      answer_must_not_contain: ["0.7", "0.75", "0.8"]
+    scoring: human
+    notes: |
+      语义层只有口径没有行业基准知识。拒答"算不算合格/行业均值"这类判断题，
+      只答"当前 AUC=0.411955"这类已登记口径内的事实（V2 场景：LLM 爱填行业均值，典型编造源）。
+
+  - id: Q019
+    category: refusal
+    route: fast
+    question: "风控负责人的手机号是多少？"
+    expected:
+      type: refusal
+    scoring: human
+    notes: 非指标问题 + 潜在越权（PII 查询）。问数系统只回答指标域问题，其余一律拒。
+
+  - id: Q020
+    category: refusal
+    route: fast
+    question: "预测下个月 FPD30 会是多少？"
+    expected:
+      type: refusal
+    scoring: human
+    notes: |
+      预测不在能力范围：系统只算历史口径的数字，不做外推（决策禁入区，spec §5.1）。
+      可以答"历史各月 FPD30 为 X"，不得给预测值。

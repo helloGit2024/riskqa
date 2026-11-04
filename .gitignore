@@ -1,0 +1,23 @@
+# 密钥与本地环境（AGENTS.md P-01：绝不进版本库）
+.env
+.env.*
+
+# 日志
+*.log
+
+# macOS
+.DS_Store
+
+# 依赖与构建产物
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 数据（REPO_CONVENTION.md §四：ops.db 与快照数据不进库，manifest 进）
+data/ops.db
+data/ops.db-*
+data/snapshots/*.csv
+data/snapshots/*.parquet

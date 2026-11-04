@@ -1,0 +1,614 @@
+openapi: 3.0.3
+info:
+  title: 风控问数系统 API
+  version: 1.0.0
+  description: 语义层驱动的风控指标问数引擎。LLM 不碰数字——所有数值来自已签字口径的确定性计算，叙事层只引用 fact_id。字段名以本文件为唯一事实来源。
+servers:
+  - url: http://localhost:8080
+    description: 内网单机
+security:
+  - RiskQAToken: []
+tags:
+  - name: ask
+    description: 问数
+  - name: evidence
+  - name: review
+  - name: governance
+  - name: ops
+paths:
+  /api/v1/ask:
+    post:
+      summary: 问数入口（自动路由快慢路）
+      operationId: askMetric
+      tags: [ask]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskRequest"
+      responses:
+        "200":
+          description: 快路命中，返回数字+fact_id+口径
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskResponse"
+        "202":
+          description: 未命中语义层，转慢路并进人审队列，结果确认前不可引用
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewPendingResponse"
+        "400":
+          $ref: "#/components/responses/UnregisteredMetric"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/RowFilterDenied"
+        "504":
+          $ref: "#/components/responses/SlaTimeout"
+  /api/v1/explore:
+    post:
+      summary: 强制慢路探查
+      operationId: explore
+      tags: [ask]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExploreRequest"
+      responses:
+        "200":
+          description: 慢路完成，含 SQL/交叉验证/人审分级
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExploreResponse"
+        "400":
+          $ref: "#/components/responses/SqlRejected"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/RecomputeMismatch"
+        "504":
+          $ref: "#/components/responses/SlaTimeout"
+  /api/v1/facts/{fid}:
+    get:
+      summary: 取事实详情
+      operationId: getFact
+      tags: [evidence]
+      parameters:
+        - name: fid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^F[0-9]{4,}$"
+      responses:
+        "200":
+          description: 事实详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fact"
+        "404":
+          description: fid 不存在——调用方编造了引用（P-07）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/evidence/{qid}:
+    get:
+      summary: 取证据快照（SQL+参数+数据版本+签字链）
+      operationId: getEvidence
+      tags: [evidence]
+      parameters:
+        - name: qid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^Q[0-9]+$"
+      responses:
+        "200":
+          description: 自包含证据快照
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Evidence"
+        "404":
+          description: qid 不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reviews:
+    post:
+      summary: 提交人审（慢路结果/归因结论）
+      operationId: submitReview
+      tags: [review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewSubmit"
+      responses:
+        "201":
+          description: 进评审队列
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRecord"
+        "400":
+          $ref: "#/components/responses/ReviewRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/reviews/{rid}/decision:
+    post:
+      summary: Owner 裁决（approve/reject/shelve+理由）
+      operationId: decideReview
+      tags: [review]
+      parameters:
+        - name: rid
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^R[0-9]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDecision"
+      responses:
+        "200":
+          description: 裁决生效（promotion 候选 approve 时同事务完成三件事）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRecord"
+        "403":
+          description: 非 Owner 角色（P-13：晋升必经 Owner 签字）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          $ref: "#/components/responses/ReviewRequired"
+  /api/v1/governance/candidates:
+    get:
+      summary: 晋升候选列表（热度+冲突标注）
+      operationId: listCandidates
+      tags: [governance]
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [pending, reminded, overdue, shelved, all]
+            default: all
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: 候选列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CandidateList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/health:
+    get:
+      summary: 健康检查（DB/快照/LLM 网关三态）
+      operationId: healthCheck
+      tags: [ops]
+      security: []
+      responses:
+        "200":
+          description: 三态正常
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: 任一态异常（含降级态）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+components:
+  securitySchemes:
+    RiskQAToken:
+      type: apiKey
+      in: header
+      name: X-RiskQA-Token
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: 字符串常量错误码
+            message:
+              type: string
+              description: 给人看的一句话（含拒绝原因）
+    AskRequest:
+      type: object
+      required: [question, caller]
+      properties:
+        question:
+          type: string
+          description: 自然语言问题（口语/别名均可）
+        time_range:
+          type: string
+          default: all
+          description: 时间窗，如 all / 30d / 365d
+        caller:
+          $ref: "#/components/schemas/Caller"
+    Caller:
+      type: object
+      required: [user, dept, role]
+      properties:
+        user:
+          type: string
+        dept:
+          type: string
+          description: 部门（行级权限归属维度）
+        role:
+          type: string
+          enum: [analyst, owner, admin]
+    AskResponse:
+      type: object
+      required: [route, metric, signature, answer_text, facts, caliber, review_level, ai_disclosure]
+      properties:
+        route:
+          type: string
+          enum: [fast, slow]
+        metric:
+          type: string
+        signature:
+          type: string
+          description: (metric,dims,filters,time_range) 归一键
+        answer_text:
+          type: string
+          description: 叙事层文本，数字一律 {{fid}} 引用
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FactRef"
+        caliber:
+          type: object
+          required: [desc, owner, signed_at]
+          properties:
+            desc:
+              type: string
+            owner:
+              type: string
+            signed_at:
+              type: string
+              format: date
+        review_level:
+          type: string
+          enum: [none, spot, must]
+        ai_disclosure:
+          type: string
+    FactRef:
+      type: object
+      required: [fid, value, unit, segment]
+      properties:
+        fid:
+          type: string
+          pattern: "^F[0-9]{4,}$"
+        value:
+          type: number
+        unit:
+          type: string
+          enum: [ratio, amount, count, score]
+        segment:
+          type: string
+          description: 维度定位，整体值为空串
+    Fact:
+      allOf:
+        - $ref: "#/components/schemas/FactRef"
+        - type: object
+          properties:
+            metric:
+              type: string
+            source:
+              type: string
+              enum: [fast, slow, recompute]
+            qid:
+              type: string
+              nullable: true
+            created_at:
+              type: string
+              format: date-time
+    Evidence:
+      type: object
+      properties:
+        qid:
+          type: string
+        question:
+          type: string
+        sql:
+          type: string
+        sql_edited:
+          type: boolean
+        data_as_of:
+          type: string
+          format: date
+        snapshot_digest:
+          type: string
+          description: manifest sha256
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FactRef"
+        confirmed_by:
+          type: array
+          items:
+            type: string
+        review_chain:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewRecord"
+    ExploreRequest:
+      type: object
+      required: [question, caller]
+      properties:
+        question:
+          type: string
+        max_fix_rounds:
+          type: integer
+          default: 2
+          maximum: 2
+        caller:
+          $ref: "#/components/schemas/Caller"
+    ExploreResponse:
+      type: object
+      required: [sql, verdict, review, facts]
+      properties:
+        sql:
+          type: string
+        verdict:
+          type: object
+          properties:
+            passed:
+              type: boolean
+            failures:
+              type: array
+              items:
+                type: string
+            cross_check:
+              type: object
+              description: 快慢两侧数字与差异说明
+        review:
+          $ref: "#/components/schemas/ReviewRecord"
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FactRef"
+    ReviewPendingResponse:
+      type: object
+      required: [route, review_id, state, message]
+      properties:
+        route:
+          type: string
+          enum: [slow]
+        review_id:
+          type: string
+        state:
+          type: string
+          enum: [pending]
+        message:
+          type: string
+          description: 必审提示——确认前不可引用
+    ReviewSubmit:
+      type: object
+      required: [subject_type, subject_id, level, assignee]
+      properties:
+        subject_type:
+          type: string
+          enum: [query, slow_result, promotion, attribution]
+        subject_id:
+          type: string
+        level:
+          type: string
+          enum: [none, spot, must]
+        assignee:
+          type: string
+          description: Owner
+        material:
+          type: object
+          description: 评审材料快照（按签名分组版）
+    ReviewDecision:
+      type: object
+      required: [decision, signer]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject, shelve]
+        reason:
+          type: string
+          description: reject/shelve 必填；approve 填口径确认语
+        signer:
+          type: string
+          description: Owner 签字人
+    ReviewRecord:
+      type: object
+      required: [rid, subject_type, subject_id, level, state, assignee, sla_due]
+      properties:
+        rid:
+          type: string
+          pattern: "^R[0-9]+$"
+        subject_type:
+          type: string
+        subject_id:
+          type: string
+        level:
+          type: string
+          enum: [none, spot, must]
+        state:
+          type: string
+          enum: [pending, reminded, overdue, signed, shelved, rejected]
+        assignee:
+          type: string
+        decided_by:
+          type: string
+          nullable: true
+        decision:
+          type: string
+          nullable: true
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        sla_due:
+          type: string
+          format: date-time
+    CandidateList:
+      type: object
+      required: [total, items]
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [signature, metric, heat, conflict_flag, state]
+            properties:
+              signature:
+                type: string
+              metric:
+                type: string
+              heat:
+                type: object
+                properties:
+                  n_queries:
+                    type: integer
+                  n_users:
+                    type: integer
+                  n_days:
+                    type: integer
+                  top_user_share:
+                    type: number
+                  concentrated:
+                    type: boolean
+              conflict_flag:
+                type: string
+                description: 口径指纹与多数不一致时标 ⚠，否则空
+              state:
+                type: string
+                enum: [pending, reminded, overdue, shelved]
+    Health:
+      type: object
+      required: [status, db, snapshot, llm_gateway]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        db:
+          type: string
+          enum: [ok, error]
+        snapshot:
+          type: object
+          properties:
+            latest:
+              type: string
+              format: date
+            digest:
+              type: string
+        llm_gateway:
+          type: string
+          enum: [ok, degraded_local, down]
+  responses:
+    Unauthorized:
+      description: token 缺失/失效/角色不足
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_UNAUTHORIZED
+              message: token 失效或角色不足
+    RowFilterDenied:
+      description: 行级权限注入后无可执行范围
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_ROW_FILTER_DENIED
+              message: 当前身份在该指标上无可见数据范围
+    SqlRejected:
+      description: SQL 三闸拒绝
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_SQL_REJECTED
+              message: SQL 未通过白名单/LIMIT/注入特征检查
+    RecomputeMismatch:
+      description: 独立重算不一致（校验闸检查 3）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_RECOMPUTE_MISMATCH
+              message: 独立重算与流水线结果不一致，已整份回退
+    ReviewRequired:
+      description: 必审内容未确认 / 必审参数缺失
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_REVIEW_REQUIRED
+              message: 该结果须 Owner 确认后方可引用
+    SlaTimeout:
+      description: 慢路熔断（60s）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_SLA_TIMEOUT
+              message: 慢路执行超 60s 已熔断
+    UnregisteredMetric:
+      description: 指标未登记
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: E_UNREGISTERED_METRIC
+              message: 指标未登记（不猜不填），已记录为候选走提名
