@@ -31,6 +31,7 @@
 | 10 | 回测场景的 OOT 数据从哪来？ | releases V4.3 | V4.0—V4.2 不依赖；V4.3 启动时确认 | 模型团队 |
 | 11 | legacy V3 的 `row_policies` 是扁平字符串（如 `{'analyst_qa': "channel IN (...)"}`），而 `row_filter(role, table)` 按两层字典读取，运行必抛 `AttributeError: 'str' object has no attribute 'get'`；影响行级权限（P-10）实际不可用 | legacy V3 内嵌 `GOVERNANCE_YAML` 的 `row_policies`；B1 迁移后的 `src/riskqa/semantic/layer.py` | 原样保留（行为等价迁移，未修）；T-4.0.2 外置 YAML 时规范为 `{role: {table: 条件}}` 两层结构并补回归测试；来源：B1 行为等价迁移时发现 | 你 |
 | 12 | `normalize_missing` 两版实现不同：金融版按列替换 `{"": NaN, "unknown": NaN, "Unknown": NaN}` 并全表替换 `-999`；V2 为 `df.replace(["", "unknown", -999], np.nan)`。金融版处理 `"Unknown"` 但不处理 pandas string 空串，V2 反之。B2 迁移取金融版，故在 pandas string dtype 下空串行为与 V2 原版不同 | legacy 金融版 / V2 的 `normalize_missing`；B2 迁移后的 `src/riskqa/data/snapshot.py` | 保留金融版（行为等价迁移，未修）；默认路径：T-4.0.6 写测试固化预期（`"Unknown"` 归一、`"unknown"` 归一、pandas string 空串按所选版本行为断言）；来源：B2 行为等价迁移时发现 | 你 |
+| 13 | 金融版 `dispatch` 与 V2 选型的计算/事实层接口不匹配：非分组同一输入旧值 `0.4`（金融版 `CALC` 对 `y` 求均值）vs 新值 `0.3333`（V2 `fpd30_rate` 按 `is_pass/is_fpd30`）；分组路径在本机 pandas 2.0.3 触发 `include_groups` TypeError，升到 pandas ≥2.2 后仍会因 V2 `compute_metric` 无 `dim` 列与 `FactStore.put` 第 4 位置参映射到 `segment` 报错，影响快路分维度查询（`tools/dispatch.py` 已按原样迁移，未适配） | legacy 金融版 `dispatch` / V2 的 `compute_metric`、`FactStore`；B3 迁移后的 `src/riskqa/tools/dispatch.py` | 原样保留（行为等价迁移，未修）；默认路径：T-4.0.6 写测试固化预期，或在 T-4.0.2 统一计算/事实层接口时一并处理；来源：B3 行为等价迁移时发现 | 你 |
 
 ---
 
