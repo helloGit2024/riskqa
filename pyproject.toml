@@ -1,0 +1,20 @@
+# Ruff 配置 · 风控问数系统
+# 规则集显式锁定（不依赖 ruff 版本默认值），口径见 docs/quality-gates.md QG-05。
+# legacy/ 是只读存档，不参与门禁；tests 允许 assert（S101）。
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "BLE", "S", "TRY", "RUF", "ISC", "FURB"]
+ignore = [
+    "RUF001",  # 中文全角字符为业务文本，非拼写歧义
+    "RUF002",  # 中文文档字符串，同上
+    "RUF003",  # 中文注释，同上
+    "TRY003",  # 长错误消息优先可读性，V4.0 不改异常文案
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # pytest 断言即测试手段
