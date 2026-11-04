@@ -94,11 +94,11 @@ eval:
 
 semantic-check:
 	@test -f config/semantic_view.yaml || (echo "语义层未外置——见 tasks.md T-4.0.2"; exit 1)
-	$(PY) -m riskqa.semantic.check config/semantic_view.yaml
+	PYTHONPATH=src $(PY) -m riskqa.semantic.check config/semantic_view.yaml
 
 governance-check:
 	@test -f config/governance.yaml || (echo "治理配置未外置——见 T-4.0.2"; exit 1)
-	$(PY) -m riskqa.governance.check config/governance.yaml
+	PYTHONPATH=src $(PY) -m riskqa.governance.check config/governance.yaml
 
 check: lint test semantic-check secret-scan
 	@echo "check 通过"

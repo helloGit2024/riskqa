@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from pathlib import Path
 
 import yaml
 
@@ -84,6 +85,11 @@ def load_governance(yaml_text: str, today: str = "2026-10-30") -> GovernanceConf
     if errs:
         raise GovernanceError("治理配置未过护栏，拒绝加载：" + "；".join(errs))
     return cfg.apply_temporary(raw.get("temporary"), today)
+
+
+def load_governance_file(path: str | Path, today: str = "2026-10-30") -> GovernanceConfig:
+    """从 config/governance.yaml 加载——薄包装，解析与护栏仍走 load_governance"""
+    return load_governance(Path(path).read_text(encoding="utf-8"), today)
 
 
 class GovernanceError(Exception):
