@@ -122,6 +122,46 @@ alert（升级链提醒发送记录）
 
 **为什么**：升级链的提醒要能查"发没发、谁认领"——否则 SLA 升级只是日志里的一行字。
 
+### 2.7 文件快照与 manifest（文件侧，不进 DB）
+
+> 正式交付的数字永远基于带 manifest 的快照（P-12）。本小节是 manifest 结构的唯一事实源，实现见 `src/riskqa/data/snapshot.py`。
+
+**目录与文件名**
+
+- 根目录 `data/snapshots/`；`*.csv` / `*.parquet` 进 `.gitignore`，manifest（`*.manifest.json`）可入库。
+- 数据文件：`<source>__<data_as_of>__<data_hash 前 8 位>.<ext>`；manifest 同名追加 `.manifest.json`，与数据文件同目录。
+- 新数据 = 新文件；同名不同内容显式拒绝覆盖；同内容重复写幂等返回已有 manifest。
+
+**manifest 字段（JSON，UTF-8，`sort_keys=True`）**
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| schema_version | INTEGER | manifest 结构版本，当前为 `1` |
+| source | TEXT | 数据源名，只允许 `[A-Za-z0-9_.-]` |
+| locator | TEXT | 相对快照根的数据文件名；禁止绝对路径与 `..`（读取时校验不逃出 root） |
+| format | TEXT | 快照格式，当前只支持 `csv` |
+| data_as_of | TEXT | 业务数据日期 `YYYY-MM-DD`，**权威来源**；文件名中的日期只供人读 |
+| rows | INTEGER | 归一后的行数 |
+| columns | ARRAY\<TEXT\> | 列顺序；读取时按它重排 |
+| dtypes | OBJECT | 列名 → dtype 字符串；读取时尝试 `astype` 还原，失败即报错 |
+| data_hash | TEXT | 归一后 DataFrame 的 16 位语义 hash（与 legacy `load_snapshot` 同口径，要求 RangeIndex） |
+| file_hash | TEXT | 数据文件全量 sha256（64 位十六进制），防篡改/位腐 |
+| created_at | TEXT | 落盘时间 `YYYY-MM-DD HH:MM:SS` 本地时间 |
+
+**双 hash 的用途**
+
+- `file_hash`：读文件时先校验字节，证明文件未被改动。
+- `data_hash`：按 `columns` 重排、按 `dtypes` 还原、`normalize_missing` 后复算，证明读回语义与写入时一致。
+- 任一不符 → `SnapshotIntegrityError`；不降级、不跳过（P-14）。
+
+**写入与读取纪律**
+
+- 写入要求 `RangeIndex`；先 `normalize_missing`；CSV 固定 `index=False, encoding="utf-8", lineterminator="\n"`，不设 `float_format`；临时文件 + `os.replace` 原子落盘；写完回读自校验。
+- 读取以 manifest 为唯一入口：缺 manifest/数据文件 → `ManifestNotFoundError`；格式不支持 → `UnsupportedFormatError`；Parquet 无引擎 → `ParquetEngineMissingError`（本批只交付 CSV，见 OPEN-QUESTIONS #18）。
+- `data_as_of` 是业务日期（T+1），与 `query_log.ts` / `fact.created_at` 的墙钟时间不同源；报告两者都印，不互相推断。
+- 快照含客户级敏感数据（P-02）：只落内网 `data/snapshots/`，不提交 Git；备份按 `ops-runbook.md` 整目录拷贝。
+
+
 ## 三、★ 权限过滤的正确写法（对照示例）
 
 ### ❌ 错误写法：应用层过滤（AI 最容易写出来的版本）
