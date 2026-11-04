@@ -24,7 +24,7 @@
 - Makefile + CI 编排（quality-gates.md 的 QG-01/02/03 先行）。
 - 现有四个 .py 文件移入 `legacy/` 存档（只读参照，不删除）。
 
-**❌ 不做什么**：不接真 LLM（FakeLLM/规则抽取器）；不做 API/MCP；不加新指标（迁入即当前 5 个）；不改任何计算逻辑。
+**❌ 不做什么**：不接真 LLM（FakeLLM/规则抽取器）；不做 API/MCP；不加新指标（迁入即当前 5 个）；不改任何计算逻辑；**不做前端**。
 
 **✓ 退出门禁**：① `make test` 全绿且覆盖 V2/V3 全部 17 个场景；② V2/V3 迁入前后输出逐场景比对一致（golden 输出留档）；③ YAML 外置后 `make semantic-check` 通过（5 指标卡三字段齐全）；④ SQLite 六表建成，raw log 落库→读出往返一致。
 

@@ -66,6 +66,9 @@ alwaysApply: true
 | R14 | 错误必须显式失败，不许静默吞掉 | （问题延迟暴露） |
 | R15 | 改动范围最小化，不许顺手重构无关代码 | （引入新 bug） |
 | R16 | 新依赖先申请（改 requirements.txt 要走 AGENTS 技术栈流程） | （供应链风险） |
+| R17 | 快路指标必须同步注册纯函数（`promotion.calc_registered=1`），否则快路拒服（P-09） | （能命中不能算） |
+| R18 | `config/semantic_view.yaml` 与 `config/governance.yaml` 是口径与参数唯一事实源；代码禁内嵌默认值，DB 不存口径（P-15） | （双事实源） |
+| R19 | 所有出口（API/报告/告警）必须带 AI 显著标识与 data_as_of（P-16） | （合规缺陷） |
 
 ## 5 · 当前版本范围（**每进入新版本由我更新本节**）
 
