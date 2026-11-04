@@ -5,9 +5,19 @@
 #   【V4.0 启用】随 tasks.md T-4.0.7 落地并当天实跑后生效；未建成时给出明确指路，不静默失败
 # 参数透传用变量：make test T="-k permission"（make 会吞 -k，anti-patterns：rag-kb 实测）
 
-.PHONY: help docs-check openq env-check test lint secret-scan health run api mcp eval semantic-check governance-check check
+.PHONY: help docs-check openq env-check test lint secret-scan health run api mcp eval semantic-check governance-check check bootstrap
 
 PY := python3
+SCRIPTS := scripts
+
+# 若仓库内 .venv 存在则优先使用（含项目依赖 pyyaml/pandas/numpy），
+# 否则退回系统 python3（此时部分“立即可用” target 会按设计指路到 T-4.0.5）。
+# 首次使用请先跑 `make bootstrap` 创建 .venv。
+ifeq ($(wildcard .venv/bin/python),)
+PY := python3
+else
+PY := .venv/bin/python
+endif
 
 help:
 	@echo "【立即可用】"
@@ -26,13 +36,22 @@ help:
 	@echo "make semantic-check - 语义层/治理 YAML 校验（三字段+护栏）"
 	@echo "make governance-check - 同 semantic-check 的治理部分"
 	@echo "make check        - 提交前一条（= lint + test + semantic-check + secret-scan）"
+	@echo "make bootstrap    - 创建 .venv 并安装基础依赖（首次使用）"
+
+# ---------- 环境引导 ----------
+bootstrap:
+	@echo "创建 .venv 并安装基础依赖（pyyaml / pandas / numpy）"
+	python3 -m venv .venv
+	.venv/bin/python -m pip install -U pip
+	.venv/bin/python -m pip install pyyaml pandas numpy
+	@echo "完成。之后 make 会自动优先使用 .venv/bin/python"
 
 # ---------- 【立即可用】 ----------
 docs-check:
-	$(PY) /Users/tj/.workbuddy/skills/ai-dev-docs-bootstrap/scripts/validate_docs.py .
+	$(PY) $(SCRIPTS)/validate_docs.py .
 
 openq:
-	$(PY) /Users/tj/.workbuddy/skills/ai-dev-docs-bootstrap/scripts/collect_open_questions.py .
+	$(PY) $(SCRIPTS)/collect_open_questions.py .
 
 env-check:
 	@$(PY) -c "import pandas, numpy, yaml; print('core deps OK')" \

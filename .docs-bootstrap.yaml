@@ -1,0 +1,13 @@
+# validate_docs.py 配置（见 scripts/validate_docs.py load_config）
+# 默认忽略目录已包含 .git/.venv/node_modules 等；这里追加本项目非文档目录：
+#   scripts/ —— vendored 校验脚本自身（自查自身会产生 WARN 误报）
+#   legacy/ —— 四个只读源码归档（非文档，迁移源；其中的 TODO 注释不应触发文档校验）
+ignore_dirs:
+  - .git
+  - .venv
+  - node_modules
+  - .mypy_cache
+  - __pycache__
+  - .pytest_cache
+  - scripts
+  - legacy
