@@ -27,7 +27,7 @@
 | 6 | "贷中风险"主题域名与指标集是否就是 demo 的 5 个？ | assumptions A-05 | 先用 demo 5 指标；首次考古后按真实清单替换（结构不变） | 你 |
 | 7 | 抽检比例定多少？ | spec §5.3 | 默认 10%（V2 实测口径），跑一个月后按误报率调 | 你 |
 | 8 | 加急通道的具体触发条件？ | V3 文档 §10.1 | 默认"≥5 独立用户或管理层问过"；首次复盘会校准 | 你 |
-| 9 | 内网 pip 源是否可用？ | assumptions A-07 | 按公司内网源写 requirements；装不上先 vendor 到 `third_party/` | 运维 |
+| 9 | 内网 pip 源是否可用？ | assumptions A-07 | 本机实测：pypi.org 10s 超时，清华镜像（`pip config` 已指向）可用；公司内网源仍待运维确认。装不上先 vendor 到 `third_party/` | 运维 |
 | 10 | 回测场景的 OOT 数据从哪来？ | releases V4.3 | V4.0—V4.2 不依赖；V4.3 启动时确认 | 模型团队 |
 | 12 | `normalize_missing` 两版实现不同：金融版按列替换 `{"": NaN, "unknown": NaN, "Unknown": NaN}` 并全表替换 `-999`；V2 为 `df.replace(["", "unknown", -999], np.nan)`。金融版处理 `"Unknown"` 但不处理 pandas string 空串，V2 反之。B2 迁移取金融版，故在 pandas string dtype 下空串行为与 V2 原版不同 | legacy 金融版 / V2 的 `normalize_missing`；B2 迁移后的 `src/riskqa/data/snapshot.py` | 保留金融版（行为等价迁移，未修）；默认路径：T-4.0.6 写测试固化预期（`"Unknown"` 归一、`"unknown"` 归一、pandas string 空串按所选版本行为断言）；来源：B2 行为等价迁移时发现 | 你 |
 | 13 | 金融版 `dispatch` 与 V2 选型的计算/事实层接口不匹配：非分组同一输入旧值 `0.4`（金融版 `CALC` 对 `y` 求均值）vs 新值 `0.3333`（V2 `fpd30_rate` 按 `is_pass/is_fpd30`）；分组路径在本机 pandas 2.0.3 触发 `include_groups` TypeError，升到 pandas ≥2.2 后仍会因 V2 `compute_metric` 无 `dim` 列与 `FactStore.put` 第 4 位置参映射到 `segment` 报错，影响快路分维度查询（`tools/dispatch.py` 已按原样迁移，未适配） | legacy 金融版 `dispatch` / V2 的 `compute_metric`、`FactStore`；B3 迁移后的 `src/riskqa/tools/dispatch.py` | 原样保留（行为等价迁移，未修）；默认路径：T-4.0.6 写测试固化预期，或在 T-4.0.2 统一计算/事实层接口时一并处理；来源：B3 行为等价迁移时发现 | 你 |
@@ -35,8 +35,7 @@
 | 15 | 分组问数中某组算出 NaN 时，是否应让整条问数失败？真实场景：① 新渠道当月只有申请、未放款（`is_pass==1` 为空）→ 该组 `fpd30_rate=NaN`；② 小客群只有单一 `y`（全好人或全坏账）→ 该组 `ks/auc=NaN`。T-4.0.3 只在 store 层拒收 NaN，未改编排层，因此当前会让整条问数失败 | `calc/metrics.py` 的四个显式 NaN 分支；`tools/dispatch.py`、`orchestration/graph_qa.py` 的 `facts.put` 调用点；T-4.0.3 的 `store/facts.py` | 保留 store 层拒收（数字纪律优先）；默认路径：T-4.0.6 写测试固化"整组缺失 vs 整问失败"的预期，再决定是否改为 NULL/原因码；来源：T-4.0.3 决策点 2 复核 | 你 |
 | 16 | "假数字"：空表 `psi` 返回 `0.0`、`score` 全缺失时 `ks=1.0`/`auc=0.0`——不抛错也不返回 NaN，比 NaN 更难发现 | `calc/metrics.py` 的 `psi/ks/auc` 实现（legacy V2 同源） | 保留 legacy 行为不修（V4.0 明确不改计算逻辑）；默认路径：T-4.0.6 固化边界测试，并在 store 层之外增加样本量/有效值告警；来源：T-4.0.3 决策点 2 复核（实测 pandas 2.0.3） | 你 |
 | 17 | `Fact.data_as_of` 在内存版 `Fact` 中存在，但 `docs/data-model.md` §2.2 的 `fact` 表没有该列；T-4.0.3 按文档不落库，由 `SqliteFactStore` 构造器/manifest 提供 | `src/riskqa/facts/store.py`；`src/riskqa/store/facts.py`；`docs/data-model.md` §2.2 | 不落库（以文档为准，避免自创列）；默认路径：T-4.0.4 manifest 实战时确认 data_as_of 的最终归属，再决定是否补列/走 manifest；来源：T-4.0.3 | 你 |
-| 18 | Parquet 快照未实现：本机 `pyarrow`/`fastparquet` 均未安装，`write_snapshot(fmt="parquet")` 与 `load_snapshot_file` 遇到 parquet 会抛 `ParquetEngineMissingError`。C-2 已确认格式为 CSV/Parquet，但 V4.0 本批只交付 CSV | `src/riskqa/data/snapshot.py`；`docs/constraints.md` §三（单文件 ≤500MB、100 万—500 万行） | 不装依赖（R16）；默认路径：T-4.0.5 建 `requirements.txt` 时评估 pyarrow 版本/体积后决定，未批准前快照只走 CSV；来源：T-4.0.4 | 运维/你 |
-| 19 | 本机 Python 环境版本与早前记录不一致：实测 `.venv` 为 `pandas 3.1.0 / numpy 2.5.4`，早前迁移记录为 `pandas 2.0.3`；pandas 3 的字符串列是 `str`（`StringDtype`）而非 `object`，`normalize_missing` 已补该分支，否则空串归一在写读两侧不一致会导致 `data_hash` 漂移 | `src/riskqa/data/snapshot.py` 的 `normalize_missing`；`requirements.txt`（尚未建） | 以实测环境为准并已补分支；默认路径：T-4.0.5 锁版本后复测快照往返与 T-4.0.6 的 legacy 场景；来源：T-4.0.4 快照验证 | 你 |
+| 18 | Parquet 快照未实现：本机 `pyarrow`/`fastparquet` 均未安装，`write_snapshot(fmt="parquet")` 与 `load_snapshot_file` 遇到 parquet 会抛 `ParquetEngineMissingError`。C-2 已确认格式为 CSV/Parquet，但 V4.0 本批只交付 CSV | `src/riskqa/data/snapshot.py`；`docs/constraints.md` §三（单文件 ≤500MB、100 万—500 万行） | T-4.0.5 已定：`requirements.txt` 不含 pyarrow（R16 未批准），Parquet 继续显式抛错；待 V4.1 前评估；来源：T-4.0.4 → T-4.0.5 | 运维/你 |
 
 ---
 
@@ -50,13 +49,14 @@
 | C-4 | 协作档？ | C0（一个人 + AI 提交） | 2026-11-01 |
 | C-5 | 归因/回测是否沉淀 SQL 为语义层指标？ | 否（V3 已确认边界：只做指标问数运营化） | 2026-11-01 |
 | C-6 | （原 #11）`row_policies` 扁平字符串导致 `row_filter(role, table)` 抛 `AttributeError`，行级权限不可用 | 随 T-4.0.2 外置 YAML 时规范为 `{role: {table: 条件}}` 两层结构；`semantic-check` 增加结构断言，扁平常量会被拒绝 | 2026-11-04 |
+| C-7 | （原 #19）本机 Python 环境版本与早前记录不一致：曾实测 pandas 3.1.0 / numpy 2.5.4，早前迁移记录为 pandas 2.0.3 | T-4.0.5 锁定 `pandas==2.2.3 / numpy==2.2.6`（Python 3.13.12），重建 `.venv` 后快照往返重验通过；`normalize_missing` 保留 `StringDtype` 分支（2.2.3 下不触发）。注意 `hash_pandas_object` 跨大版本不保证一致，已有快照换环境需重跑往返 | 2026-11-04 |
 
 ---
 
 <!-- AUTO-COLLECT:BEGIN -->
 ### 🤖 自动汇总（2026-11-04 · 共 0 处）
 
-扫描根目录：`/Users/tj/WorkBuddy/2026-10-10-16-24-17/风控问数系统`
+扫描根目录：`/Users/tj/Documents/trae_projects/风控问数系统`
 
 > **先说结论**：十来个待确认项里，真正阻塞的通常只有两三个。
 > 把阻塞项挑出来后可以立刻开工，其余给保守默认值即可 ——
