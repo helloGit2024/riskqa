@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """promotion DAO：只追加；evidence 自包含快照存 JSON。"""
 
 from __future__ import annotations
@@ -13,14 +12,32 @@ class PromotionRepo:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
 
-    def insert(self, *, pid: str, metric: str, signature: str, promoted_at: str,
-               owner: str, evidence: Any, aliases_added: Any,
-               calc_registered: int = 0) -> None:
+    def insert(
+        self,
+        *,
+        pid: str,
+        metric: str,
+        signature: str,
+        promoted_at: str,
+        owner: str,
+        evidence: Any,
+        aliases_added: Any,
+        calc_registered: int = 0,
+    ) -> None:
         self._conn.execute(
             "INSERT INTO promotion (pid, metric, signature, promoted_at, owner, "
             "evidence, aliases_added, calc_registered) VALUES (?,?,?,?,?,?,?,?)",
-            (pid, metric, signature, promoted_at, owner, encode_json(evidence),
-             encode_json(aliases_added), int(calc_registered)))
+            (
+                pid,
+                metric,
+                signature,
+                promoted_at,
+                owner,
+                encode_json(evidence),
+                encode_json(aliases_added),
+                int(calc_registered),
+            ),
+        )
 
     def get(self, pid: str) -> dict | None:
         row = self._conn.execute("SELECT * FROM promotion WHERE pid=?", (pid,)).fetchone()

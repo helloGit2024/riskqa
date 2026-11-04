@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """存储层：SQLite 运营数据（schema + 六表 DAO）。
 
 错误类型集中在这里，子模块只 import 不做二次定义。

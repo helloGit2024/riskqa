@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """语义层：YAML 外置 + 指标卡 + 签字闸（口径唯一来源）。"""
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ class SemanticLayer:
         """入口路由的命中判定：指标名 + 别名（业务口语"首期逾期"也要能命中）"""
         q = question.lower()
         for name, m in self.metrics.items():
-            candidates = [name] + m.get("aliases", [])
+            candidates = [name, *m.get("aliases", [])]
             if any(c.lower() in q for c in candidates):
                 return name
         return None
@@ -54,11 +53,15 @@ class SemanticLayer:
 
     def to_yaml(self) -> str:
         return yaml.safe_dump(
-            {"version": self.version,
-             "metrics": list(self.metrics.values()),
-             "tables": list(self.tables.values()),
-             "row_policies": self.row_policies},
-            allow_unicode=True, sort_keys=False)
+            {
+                "version": self.version,
+                "metrics": list(self.metrics.values()),
+                "tables": list(self.tables.values()),
+                "row_policies": self.row_policies,
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        )
 
     @property
     def dim_enum(self) -> list[str]:

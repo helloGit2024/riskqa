@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """存储层 CLI：python -m riskqa.store.cli init|check|purge --db <path>
 
 默认库：data/ops.db（gitignore，只进备份）。
@@ -51,8 +50,10 @@ def _purge(db_path: Path, config_path: Path) -> int:
         print(f"purge 失败：库不存在 {db_path.resolve()}（先执行 init）", file=sys.stderr)
         return 1
     if not config_path.exists():
-        print(f"purge 失败：治理配置不存在 {config_path.resolve()}——retention_days 必须来自配置（P-15）",
-              file=sys.stderr)
+        print(
+            f"purge 失败：治理配置不存在 {config_path.resolve()}——retention_days 必须来自配置（P-15）",
+            file=sys.stderr,
+        )
         return 1
     try:
         cfg = load_governance_file(config_path)

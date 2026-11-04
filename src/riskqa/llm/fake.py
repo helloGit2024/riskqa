@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """LLM 层：FakeLLM 脚本驱动 + DegradedLLM 降级链（V2 版）。"""
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 
 class FakeLLM:
@@ -17,7 +16,7 @@ class FakeLLM:
 
     def chat(self, task: str, prompt: str, **kw) -> dict:
         self.calls.append({"task": task, "prompt": prompt})
-        self.tokens_used += len(prompt) // 4 + 50      # 估算成本
+        self.tokens_used += len(prompt) // 4 + 50  # 估算成本
         return self._script.pop(0) if self._script else {"type": "finish"}
 
 
@@ -32,8 +31,10 @@ class DegradedLLM:
     def chat(self, task: str, prompt: str, **kw) -> dict:
         try:
             return self.primary.chat(task, prompt, **kw)
-        except Exception as e:                           # 超时/限流/返回异常
+        except Exception as e:  # noqa: BLE001  # 降级边界：主模型任何异常都转规则兜底
             self.degraded = True
             out = self.fallback(prompt)
-            out["_degraded"] = f"LLM 不可用（{type(e).__name__}），已降级：{out.get('_degraded_reason', '规则兜底')}"
+            out["_degraded"] = (
+                f"LLM 不可用（{type(e).__name__}），已降级：{out.get('_degraded_reason', '规则兜底')}"
+            )
             return out

@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """治理配置：三层（全局/域覆盖/临时）+ 护栏校验（V3 版）。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import yaml
@@ -40,17 +39,19 @@ class GovernanceConfig:
         merged = {**asdict(self.promotion), **ov}
         return PromotionRule(**merged)
 
-    def apply_temporary(self, temporary: list[dict], today: str) -> "GovernanceConfig":
+    def apply_temporary(self, temporary: list[dict], today: str) -> GovernanceConfig:
         """第三层：未过期的临时调整叠加生效；过期忽略"""
         import dataclasses
+
         cfg = self
         for t in temporary or []:
             if t.get("expires", "9999") >= today:
                 cfg = dataclasses.replace(
                     cfg,
                     promotion=dataclasses.replace(
-                        cfg.promotion,
-                        **{t["param"].split(".")[-1]: t["value"]}))
+                        cfg.promotion, **{t["param"].split(".")[-1]: t["value"]}
+                    ),
+                )
         return cfg
 
 
@@ -80,7 +81,8 @@ def load_governance(yaml_text: str, today: str = "2026-10-30") -> GovernanceConf
         promotion=PromotionRule(**g["promotion"]),
         window_days=g["window_days"],
         retention_days=g["retention_days"],
-        review=ReviewRule(**g["review"]))
+        review=ReviewRule(**g["review"]),
+    )
     errs = validate_governance(cfg)
     if errs:
         raise GovernanceError("治理配置未过护栏，拒绝加载：" + "；".join(errs))

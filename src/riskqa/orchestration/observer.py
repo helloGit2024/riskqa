@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """观测层：trace / 成本 / 审计日志（监管要求全程留痕）。"""
 
 from __future__ import annotations
@@ -12,12 +11,12 @@ from ..llm.fake import FakeLLM
 @dataclass
 class AuditEntry:
     ts: str
-    actor: str          # 谁发起的
+    actor: str  # 谁发起的
     question: str
     route: str
     sql: str
     review_level: str
-    human_action: str   # accept / edit / response / auto
+    human_action: str  # accept / edit / response / auto
     model: str
     ai_disclosed: bool
 
@@ -34,8 +33,9 @@ class Observer:
         self.trace.append({"node": node, "t": round(time.time(), 3), **kw})
 
     def audit_append(self, **kw):
-        self.audit.append(AuditEntry(ts=time.strftime("%Y-%m-%d %H:%M:%S"),
-                                     ai_disclosed=True, **kw))
+        self.audit.append(
+            AuditEntry(ts=time.strftime("%Y-%m-%d %H:%M:%S"), ai_disclosed=True, **kw)
+        )
 
     def cost(self, llm: FakeLLM):
         self.cost_tokens += llm.tokens_used

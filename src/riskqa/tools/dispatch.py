@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """工具层：调用闸 + 执行分发（结果一律进 FactStore）。"""
 
 from __future__ import annotations
@@ -37,13 +36,20 @@ def dispatch(action: dict, df: pd.DataFrame, facts: FactStore) -> dict:
     name, args = action["name"], action.get("args", {})
     if name == "query_metric":
         res = compute_metric(args["metric"], df, args.get("group_by"))
-        if "group_by" in args and args["group_by"]:
-            fids = [facts.put(float(r["value"]), SEMANTIC[args["metric"]]["unit"],
-                              args["metric"], f"by {args['group_by']}",
-                              segment=f"{args['group_by']}={r['dim']}")
-                    for _, r in res.iterrows()]
+        if args.get("group_by"):
+            fids = [
+                facts.put(
+                    float(r["value"]),
+                    SEMANTIC[args["metric"]]["unit"],
+                    args["metric"],
+                    f"by {args['group_by']}",
+                    segment=f"{args['group_by']}={r['dim']}",
+                )
+                for _, r in res.iterrows()
+            ]
             return {"fids": fids, "table": res.to_dict("records")}
-        fid = facts.put(float(res["value"][0]), SEMANTIC[args["metric"]]["unit"],
-                        args["metric"], "overall")
+        fid = facts.put(
+            float(res["value"][0]), SEMANTIC[args["metric"]]["unit"], args["metric"], "overall"
+        )
         return {"fid": fid, "value": float(res["value"][0])}
     return {"ok": True}

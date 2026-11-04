@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """计算层：纯函数指标（数值唯一产出点，P-03）。"""
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -37,8 +36,10 @@ def auc(df: pd.DataFrame) -> float:
     pos, neg = s[y == 1], s[y == 0]
     if len(pos) == 0 or len(neg) == 0:
         return float("nan")
-    return float((pos.values[:, None] > neg.values[None, :]).mean()
-                 + 0.5 * (pos.values[:, None] == neg.values[None, :]).mean())
+    return float(
+        (pos.values[:, None] > neg.values[None, :]).mean()
+        + 0.5 * (pos.values[:, None] == neg.values[None, :]).mean()
+    )
 
 
 def psi(df: pd.DataFrame) -> float:
@@ -52,8 +53,11 @@ def psi(df: pd.DataFrame) -> float:
 
 
 METRIC_FUNCS: dict[str, Callable[[pd.DataFrame], float]] = {
-    "fpd30_rate": fpd30_rate, "pass_rate": pass_rate,
-    "ks": ks, "auc": auc, "psi": psi,
+    "fpd30_rate": fpd30_rate,
+    "pass_rate": pass_rate,
+    "ks": ks,
+    "auc": auc,
+    "psi": psi,
 }
 
 
@@ -64,6 +68,8 @@ def compute_metric(name: str, df: pd.DataFrame, group_by: str | None = None) -> 
     fn = METRIC_FUNCS[name]
     if group_by is None:
         return pd.DataFrame([{"value": fn(df)}])
-    return (df.groupby(group_by, observed=True)
-              .apply(lambda g: pd.Series({"value": fn(g)}), include_groups=False)
-              .reset_index())
+    return (
+        df.groupby(group_by, observed=True)
+        .apply(lambda g: pd.Series({"value": fn(g)}), include_groups=False)
+        .reset_index()
+    )

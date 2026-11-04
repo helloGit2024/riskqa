@@ -1,14 +1,14 @@
-# -*- coding: utf-8 -*-
 """连接层：统一 PRAGMA、显式事务、时间戳与 JSON 编解码。"""
 
 from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 
 def now_ts() -> str:

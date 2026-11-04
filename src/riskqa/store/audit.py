@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """audit_entry DAO：旁路审计只追加；aid 自增。"""
 
 from __future__ import annotations
@@ -13,17 +12,26 @@ class AuditRepo:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
 
-    def insert(self, *, ts: str, actor: str, action: str, prev_hash: str,
-               target: str | None = None, detail: Any = None) -> int:
+    def insert(
+        self,
+        *,
+        ts: str,
+        actor: str,
+        action: str,
+        prev_hash: str,
+        target: str | None = None,
+        detail: Any = None,
+    ) -> int:
         cur = self._conn.execute(
             "INSERT INTO audit_entry (ts, actor, action, target, detail, prev_hash) "
             "VALUES (?,?,?,?,?,?)",
-            (ts, actor, action, target, None if detail is None else encode_json(detail),
-             prev_hash))
+            (ts, actor, action, target, None if detail is None else encode_json(detail), prev_hash),
+        )
         return int(cur.lastrowid)
 
-    def list(self, *, actor: str | None = None, action: str | None = None,
-             limit: int = 100) -> list[dict]:
+    def list(
+        self, *, actor: str | None = None, action: str | None = None, limit: int = 100
+    ) -> list[dict]:
         sql = "SELECT * FROM audit_entry"
         cond, args = [], []
         if actor is not None:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """数据层：数据源注册表、快照 manifest（血缘）与缺失值归一。"""
 
 from .snapshot import (

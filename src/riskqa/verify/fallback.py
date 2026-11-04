@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """校验层：整段回退规则模板（可用性让位一致性）。"""
 
 from __future__ import annotations

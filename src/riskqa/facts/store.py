@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """事实层：FactStore + fact_id（全文数字唯一来源）。"""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
@@ -14,8 +13,8 @@ class Fact:
     value: object
     unit: str
     metric: str
-    segment: str      # V1 修复 bug 的字段：整体 vs 分维度精确匹配
-    source: str       # fast | slow（哪条路产的，交叉验证用）
+    segment: str  # V1 修复 bug 的字段：整体 vs 分维度精确匹配
+    source: str  # fast | slow（哪条路产的，交叉验证用）
     data_as_of: str
 
 
@@ -27,8 +26,9 @@ class FactStore:
         self._facts: dict[str, Fact] = {}
         self._data_as_of = data_as_of
 
-    def put(self, value, unit: str, metric: str, segment: str = "overall",
-            source: str = "fast") -> str:
+    def put(
+        self, value, unit: str, metric: str, segment: str = "overall", source: str = "fast"
+    ) -> str:
         self._seq += 1
         fid = f"F{self._seq:04d}"
         self._facts[fid] = Fact(fid, value, unit, metric, segment, source, self._data_as_of)
@@ -38,17 +38,20 @@ class FactStore:
         try:
             return self._facts[fid]
         except KeyError:
-            raise UnknownFactError(f"{fid} 不存在——模型编造了引用")
+            raise UnknownFactError(f"{fid} 不存在——模型编造了引用") from None
 
     def digest(self) -> list[dict]:
         """注入上下文：模型需要知道有哪些数可用，才能写叙事"""
         return [asdict(f) for f in self._facts.values()]
 
     def manifest(self) -> dict:
-        raw = json.dumps([asdict(f) for f in self._facts.values()],
-                         sort_keys=True, ensure_ascii=False, default=str)
-        return {"count": len(self._facts),
-                "sha256": hashlib.sha256(raw.encode()).hexdigest()}
+        raw = json.dumps(
+            [asdict(f) for f in self._facts.values()],
+            sort_keys=True,
+            ensure_ascii=False,
+            default=str,
+        )
+        return {"count": len(self._facts), "sha256": hashlib.sha256(raw.encode()).hexdigest()}
 
 
 class UnknownFactError(Exception):

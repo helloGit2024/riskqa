@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """快照 CLI：python -m riskqa.data.cli snapshot|verify
 
 snapshot：从 CSV 生成带 manifest 的不可变快照
@@ -35,8 +34,10 @@ def _snapshot(args: argparse.Namespace) -> int:
         return 1
     manifest_path = Path(args.root).resolve() / (man.locator + ".manifest.json")
     print(f"snapshot: {manifest_path}")
-    print(f"  rows={man.rows} data_as_of={man.data_as_of} "
-          f"data_hash={man.data_hash} file_hash={man.file_hash}")
+    print(
+        f"  rows={man.rows} data_as_of={man.data_as_of} "
+        f"data_hash={man.data_hash} file_hash={man.file_hash}"
+    )
     return 0
 
 
@@ -47,8 +48,10 @@ def _verify(args: argparse.Namespace) -> int:
         print(f"verify 失败：{e}", file=sys.stderr)
         return 1
     print(f"verify: OK {Path(args.manifest).resolve()}")
-    print(f"  rows={man.rows} data_as_of={man.data_as_of} "
-          f"data_hash={man.data_hash} file_hash={man.file_hash}")
+    print(
+        f"  rows={man.rows} data_as_of={man.data_as_of} "
+        f"data_hash={man.data_hash} file_hash={man.file_hash}"
+    )
     return 0
 
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """保留期清理：唯一 DELETE 路径，只清 query_log，期限由调用方传入。"""
 
 from __future__ import annotations
@@ -7,8 +6,7 @@ import sqlite3
 from datetime import datetime, timedelta
 
 
-def purge_query_log(conn: sqlite3.Connection, days: int,
-                    today: str | None = None) -> int:
+def purge_query_log(conn: sqlite3.Connection, days: int, today: str | None = None) -> int:
     """删除 ts < today - days 的 raw log，返回删除行数。
 
     days 必须显式传入（来自 config/governance.yaml 的 retention_days）——

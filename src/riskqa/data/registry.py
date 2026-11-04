@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """数据层：数据源注册表（新增数据源 = 加一个类，调用方零改动）。"""
 
 from __future__ import annotations
 
 import hashlib
-from typing import Callable
+from collections.abc import Callable
 
 import pandas as pd
 
@@ -21,6 +20,7 @@ class DataSourceRegistry:
         def deco(fn):
             self._registry[name] = fn
             return fn
+
         return deco
 
     def load(self, cfg: dict) -> tuple[pd.DataFrame, Manifest]:
@@ -31,10 +31,15 @@ class DataSourceRegistry:
         if isinstance(loaded, tuple):  # 快照数据源自带 manifest（含 file_hash/columns）
             return loaded
         df = normalize_missing(loaded)
-        man = Manifest(source=cfg["type"], locator=str(cfg.get("locator", "memory")),
-                       data_as_of=cfg["as_of"], rows=len(df),
-                       data_hash=hashlib.sha256(
-                           pd.util.hash_pandas_object(df, index=True).values.tobytes()).hexdigest()[:16])
+        man = Manifest(
+            source=cfg["type"],
+            locator=str(cfg.get("locator", "memory")),
+            data_as_of=cfg["as_of"],
+            rows=len(df),
+            data_hash=hashlib.sha256(
+                pd.util.hash_pandas_object(df, index=True).values.tobytes()
+            ).hexdigest()[:16],
+        )
         return df, man
 
 

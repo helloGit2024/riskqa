@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """语义层 YAML 校验 CLI：make semantic-check 的入口。
 
 用法：python -m riskqa.semantic.check config/semantic_view.yaml
@@ -50,14 +49,16 @@ def main(argv: list[str]) -> int:
     try:
         sem = load_semantic(Path(argv[1]))
         errs = _check(sem)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # CLI 边界：统一打印错误并返回 1
         print(f"semantic-check 失败：{type(e).__name__}: {e}", file=sys.stderr)
         return 1
     if errs:
         print("semantic-check 失败：" + "；".join(errs), file=sys.stderr)
         return 1
-    print(f"semantic-check: OK（{len(sem.metrics)} 指标 / "
-          f"{len(sem.dim_enum)} 维度 / {len(sem.tables)} 表）")
+    print(
+        f"semantic-check: OK（{len(sem.metrics)} 指标 / "
+        f"{len(sem.dim_enum)} 维度 / {len(sem.tables)} 表）"
+    )
     return 0
 
 

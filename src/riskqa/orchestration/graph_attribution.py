@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """编排层：监控归因（LangGraph 子图）。"""
 
 from __future__ import annotations
@@ -15,27 +14,27 @@ from ..tools.gates import check_sql, inject_row_filter
 from .graph_qa import sql_execute
 from .observer import Observer
 
-THRESHOLDS = {"fpd30_rate": 0.25, "psi": 0.25}   # 监控阈值（策略组登记）
+THRESHOLDS = {"fpd30_rate": 0.25, "psi": 0.25}  # 监控阈值（策略组登记）
 
 
 class AttrState(TypedDict, total=False):
     event: dict
-    hypotheses: list       # [{text, status, evidence}]
+    hypotheses: list  # [{text, status, evidence}]
     round: int
     report: dict
     trace: list
 
 
-def build_attribution_graph(sem: SemanticLayer, df: pd.DataFrame,
-                            llm: FakeLLM, obs: Observer,
-                            max_rounds: int = 3) -> Any:
+def build_attribution_graph(
+    sem: SemanticLayer, df: pd.DataFrame, llm: FakeLLM, obs: Observer, max_rounds: int = 3
+) -> Any:
     """V2 升级：归因是唯一"Agent 循环真正创造价值"的场景（ReAct 主战场）
 
     与问数的三处不同：事件触发 / 假设空间要穷游完 / 输出是证据链。
     检测层纯规则不用 LLM；结论必须人确认才标记"已定位"。
     """
     try:
-        from langgraph.graph import StateGraph, START, END
+        from langgraph.graph import END, START, StateGraph
     except ImportError as e:
         raise RuntimeError("langgraph 未安装：见 tasks T-4.0.5") from e
 
@@ -45,20 +44,27 @@ def build_attribution_graph(sem: SemanticLayer, df: pd.DataFrame,
         for m, th in THRESHOLDS.items():
             v = METRIC_FUNCS[m](df)
             if not pd.isna(v) and v > th:
-                events.append({"metric": m, "value": float(v),
-                               "threshold": th, "segment": "overall"})
+                events.append(
+                    {"metric": m, "value": float(v), "threshold": th, "segment": "overall"}
+                )
         obs.log("attr_detect", events=events)
-        return {"event": events[0] if events else {}, "round": 0,
-                "hypotheses": [], "trace": ["detect"]}
+        return {
+            "event": events[0] if events else {},
+            "round": 0,
+            "hypotheses": [],
+            "trace": ["detect"],
+        }
 
     def detect_edge(state: AttrState) -> Literal["hypothesize", "summarize"]:
         return "hypothesize" if state.get("event") else "summarize"
 
     def hypothesize(state: AttrState) -> dict:
         tested = [h["text"] for h in state.get("hypotheses", [])]
-        resp = llm.chat("drill",
-                        f"异常事件：{state['event']}。已测试假设：{tested}。"
-                        f"请提出尚未测试的新假设（没有则返回空列表）。")
+        resp = llm.chat(
+            "drill",
+            f"异常事件：{state['event']}。已测试假设：{tested}。"
+            f"请提出尚未测试的新假设（没有则返回空列表）。",
+        )
         new = resp.get("hypotheses", [])
         hyps = list(state.get("hypotheses", []))
         for h in new:
@@ -66,35 +72,44 @@ def build_attribution_graph(sem: SemanticLayer, df: pd.DataFrame,
                 hyps.append({"text": h, "status": "pending", "evidence": ""})
         obs.log("attr_hypothesize", new=new, total=len(hyps))
         obs.cost(llm)
-        return {"hypotheses": hyps, "round": state.get("round", 0) + 1,
-                "trace": state["trace"] + ["hypothesize"]}
+        return {
+            "hypotheses": hyps,
+            "round": state.get("round", 0) + 1,
+            "trace": state["trace"] + ["hypothesize"],
+        }
 
     def drill(state: AttrState) -> dict:
         """下钻验证：挂慢路工具（SQL 已过静态检查 + 行级权限）"""
-        resp = llm.chat("drill",
-                        f"对以下 pending 假设各给一条验证 SQL："
-                        f"{[h['text'] for h in state['hypotheses'] if h['status'] == 'pending']}")
+        resp = llm.chat(
+            "drill",
+            f"对以下 pending 假设各给一条验证 SQL："
+            f"{[h['text'] for h in state['hypotheses'] if h['status'] == 'pending']}",
+        )
         for d in resp.get("drills", []):
             verdict = check_sql(d["sql"])
             if not verdict.ok:
-                continue                      # 规则不过，跳过该下钻
-            sql = inject_row_filter(d["sql"], "fact_application",
-                                    sem.row_filter("risk_admin", "fact_application") or "")
+                continue  # 规则不过，跳过该下钻
+            sql = inject_row_filter(
+                d["sql"], "fact_application", sem.row_filter("risk_admin", "fact_application") or ""
+            )
             try:
                 res = sql_execute(df, sql)
+            except Exception as e:  # noqa: BLE001  # 单条下钻失败不中断其他假设
+                obs.log("attr_drill_error", hypothesis=d.get("h", ""), error=str(e))
+            else:
                 for h in state["hypotheses"]:
                     if h["text"] == d["h"]:
                         h["evidence"] = res.to_dict("records")
-            except Exception:
-                continue                      # 单条下钻失败不影响其他假设
         obs.log("attr_drill", drilled=len(resp.get("drills", [])))
         obs.cost(llm)
         return {"trace": state["trace"] + ["drill"]}
 
     def evaluate(state: AttrState) -> dict:
-        resp = llm.chat("drill",
-                        f"根据证据判定每个假设：supported / refuted / untested："
-                        f"{json.dumps(state['hypotheses'], ensure_ascii=False, default=str)}")
+        resp = llm.chat(
+            "drill",
+            f"根据证据判定每个假设：supported / refuted / untested："
+            f"{json.dumps(state['hypotheses'], ensure_ascii=False, default=str)}",
+        )
         for v in resp.get("verdicts", []):
             for h in state["hypotheses"]:
                 if h["text"] == v["h"]:
@@ -118,10 +133,11 @@ def build_attribution_graph(sem: SemanticLayer, df: pd.DataFrame,
             "confirmed": [h for h in hyps if h["status"] == "supported"],
             "excluded": [h for h in hyps if h["status"] == "refuted"],
             "unresolved": [h for h in hyps if h["status"] in ("pending", "untested")],
-            "needs_human_confirm": True,     # 结论人确认才标记"已定位"
+            "needs_human_confirm": True,  # 结论人确认才标记"已定位"
         }
-        obs.log("attr_summarize", confirmed=len(report["confirmed"]),
-                excluded=len(report["excluded"]))
+        obs.log(
+            "attr_summarize", confirmed=len(report["confirmed"]), excluded=len(report["excluded"])
+        )
         return {"report": report, "trace": state["trace"] + ["summarize"]}
 
     g = StateGraph(AttrState)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """校验层：三重检查——整个方案的安全底线。"""
 
 from __future__ import annotations
@@ -50,6 +49,11 @@ def verify_report(narrative: str, facts: FactStore, df: pd.DataFrame) -> Verdict
             sub = df[df[dim].astype(str) == val]
             expect = METRIC_FUNCS[metric](sub) if len(sub) else float("nan")
         if not np.isclose(float(f["value"]), float(expect), rtol=1e-6, equal_nan=True):
-            failures.append(("render_mismatch", f["fid"],
-                             f"{metric}@{f['segment']} 报告 {f['value']} vs 重算 {expect}"))
+            failures.append(
+                (
+                    "render_mismatch",
+                    f["fid"],
+                    f"{metric}@{f['segment']} 报告 {f['value']} vs 重算 {expect}",
+                )
+            )
     return Verdict(passed=not failures, failures=failures)

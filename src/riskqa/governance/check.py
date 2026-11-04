@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """治理配置校验 CLI：make governance-check 的入口。
 
 用法：python -m riskqa.governance.check config/governance.yaml
@@ -19,12 +18,12 @@ def main(argv: list[str]) -> int:
         return 2
     path = Path(argv[1])
     try:
-        base = load_governance_file(path, "2026-12-01")      # 临时调整已过期
-        active = load_governance_file(path, "2026-10-30")    # 临时调整生效
+        base = load_governance_file(path, "2026-12-01")  # 临时调整已过期
+        active = load_governance_file(path, "2026-10-30")  # 临时调整生效
     except GovernanceError as e:
         print(f"governance-check 失败：{e}", file=sys.stderr)
         return 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # CLI 边界：统一打印错误并返回 1
         print(f"governance-check 失败：{type(e).__name__}: {e}", file=sys.stderr)
         return 1
 
@@ -40,8 +39,10 @@ def main(argv: list[str]) -> int:
     if errs:
         print("governance-check 失败：" + "；".join(errs), file=sys.stderr)
         return 1
-    print(f"governance-check: OK（window={base.window_days} / retention={base.retention_days} / "
-          f"temporary 生效 {active.promotion.min_users} vs 基线 {base.promotion.min_users}）")
+    print(
+        f"governance-check: OK（window={base.window_days} / retention={base.retention_days} / "
+        f"temporary 生效 {active.promotion.min_users} vs 基线 {base.promotion.min_users}）"
+    )
     return 0
 
 
