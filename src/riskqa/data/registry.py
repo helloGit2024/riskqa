@@ -8,7 +8,7 @@ from typing import Callable
 
 import pandas as pd
 
-from .snapshot import Manifest, normalize_missing
+from .snapshot import Manifest, load_snapshot_file, normalize_missing
 
 
 class DataSourceRegistry:
@@ -27,7 +27,10 @@ class DataSourceRegistry:
         src = self._registry.get(cfg["type"])
         if src is None:
             raise KeyError(f"数据源 {cfg['type']!r} 未注册，已注册：{sorted(self._registry)}")
-        df = normalize_missing(src(cfg))
+        loaded = src(cfg)
+        if isinstance(loaded, tuple):  # 快照数据源自带 manifest（含 file_hash/columns）
+            return loaded
+        df = normalize_missing(loaded)
         man = Manifest(source=cfg["type"], locator=str(cfg.get("locator", "memory")),
                        data_as_of=cfg["as_of"], rows=len(df),
                        data_hash=hashlib.sha256(
@@ -46,6 +49,12 @@ def _load_memory(cfg: dict) -> pd.DataFrame:
 @REGISTRY.register("csv")
 def _load_csv(cfg: dict) -> pd.DataFrame:
     return pd.read_csv(cfg["locator"])
+
+
+@REGISTRY.register("snapshot")
+def _load_snapshot_cfg(cfg: dict) -> tuple[pd.DataFrame, Manifest]:
+    """正式数据源：manifest 是唯一入口，加载时做双 hash 校验（P-12）"""
+    return load_snapshot_file(cfg["manifest"], root=cfg.get("root"))
 
 
 def load_data(cfg: dict) -> tuple[pd.DataFrame, Manifest]:

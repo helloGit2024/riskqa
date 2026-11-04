@@ -1,0 +1,1 @@
+# 快照目录占位：数据文件（*.csv / *.parquet）不入 Git，manifest 可入库。
