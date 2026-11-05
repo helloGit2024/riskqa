@@ -17,9 +17,10 @@
 - **依赖**：无（第一个任务）
 - **涉及文件**：`src/riskqa/**`、`legacy/`
 - **验收怎么验**：`make test` 全绿（T-4.0.6 建成后）；逐场景输出与 legacy 原版逐字节比对留档
+- **收尾核对（2026-11-05）**：包化已完成；6 个纯函数（fpd30_rate/pass_rate/ks/auc/psi/compute_metric）AST 与 legacy V2 完全一致，17 场景全过。**缺**「逐场景输出逐字节比对留档」文件（属 T-4.0.10），故暂不标完成。
 - **难度**：⭐⭐⭐
 
-#### T-4.0.2 · 语义层与治理 YAML 外置
+#### T-4.0.2 · 语义层与治理 YAML 外置 ✅（2026-11-05）
 - **做什么**：V2/V3 内嵌的 `SEMANTIC_YAML` / `GOVERNANCE_YAML` 字符串落为 `config/semantic_view.yaml` 与 `config/governance.yaml`；`semantic/` 与 `governance/` 模块改为从文件加载；删除代码内所有口径默认值（P-15）。
 - **对应验收标准**：releases V4.0 ③；AGENTS P-15
 - **依赖**：T-4.0.1
@@ -27,7 +28,7 @@
 - **验收怎么验**：`make semantic-check` + `make governance-check` 通过；grep 代码无 YAML 字面量残留
 - **难度**：⭐⭐
 
-#### T-4.0.3 · SQLite store 层 + 六表
+#### T-4.0.3 · SQLite store 层 + 六表 ✅（2026-11-05）
 - **做什么**：实现 `store/schema.sql`（query_log/fact/review_record/promotion/audit_entry/alert）+ DAO；V3 的内存结构（QueryLog/FactStore/ReviewState）落库；保留期清理函数（1 年）。
 - **对应验收标准**：releases V4.0 ④；data-model 全表
 - **依赖**：T-4.0.1
@@ -41,9 +42,10 @@
 - **依赖**：T-4.0.1；外部：数仓导出（OPEN-QUESTIONS #2）
 - **涉及文件**：`src/riskqa/data/`、`data/snapshots/`
 - **验收怎么验**：demo 数据 + 真实导出各跑一次 load_snapshot，manifest 字段齐全；归一化前后行数不变
+- **收尾核对（2026-11-05）**：**缺** Parquet 加载（OPEN-QUESTIONS #18）与数仓真实导出（#2）；demo CSV 往返已通过，故不标完成。
 - **难度**：⭐⭐
 
-#### T-4.0.5 · requirements.txt 与依赖锁定
+#### T-4.0.5 · requirements.txt 与依赖锁定 ✅（2026-11-05）
 - **做什么**：按实测版本写 `requirements.txt`（pandas/numpy/pyyaml/langgraph 1.2.x/pytest/ruff/fastapi/mcp）；内网 pip 源验证（A-07）。
 - **对应验收标准**：AGENTS 技术栈表
 - **依赖**：无
@@ -51,7 +53,7 @@
 - **验收怎么验**：新建 venv → `pip install -r requirements.txt` → `make env-check` 全 OK
 - **难度**：⭐
 
-#### T-4.0.6 · tests/ pytest 化
+#### T-4.0.6 · tests/ pytest 化 ✅（2026-11-05）
 - **做什么**：V2 九场景 + V3 八场景断言从 `main()` 迁入 `tests/scenario/`；计算层/闸门/签名/指纹/热度单测入 `tests/unit/`；FakeLLM 脚本机制保留（P-17）。
 - **对应验收标准**：releases V4.0 ①；spec §3.2（失败场景可复现）
 - **依赖**：T-4.0.1
@@ -65,6 +67,7 @@
 - **依赖**：T-4.0.5/6/2
 - **涉及文件**：`Makefile`、CI 配置
 - **验收怎么验**：每个 target 当天实跑一次并通过；CI 红一次故意失败的提交验证门禁会拦
+- **收尾核对（2026-11-05）**：`make ci` 全过，GitHub Actions 有 success run，本地三项故障注入均被拦截；**缺**线上「故意失败提交」的一次红色 run（未推送），故保留未完成。
 - **难度**：⭐⭐
 
 #### T-4.0.8 · 仓库初始化与规则入口确认 ✅（2026-11-05）
@@ -81,6 +84,7 @@
 - **依赖**：T-4.0.2；外部：Owner 时间（A-06）
 - **涉及文件**：`docs/archaeology-report.md`（新）、`config/semantic_view.yaml`（签字后）
 - **验收怎么验**：证据率 ≥90%；每个冲突点变成给 Owner 的具体问题；人审单条 <2 分钟
+- **收尾核对（2026-11-05）**：`docs/archaeology-report.md` 已完成（79 处文件:行证据、6 条冲突、5 个 Owner 问题）；**缺** Owner 签字、四指标定义（OPEN-QUESTIONS #24）、人审时长实测，故不标完成。
 - **难度**：⭐⭐⭐
 
 #### T-4.0.10 · V4.0 退出评审
@@ -89,6 +93,7 @@
 - **依赖**：T-4.0.1—9
 - **涉及文件**：`docs/experiments/2026-xx-xx-v40-baseline.md`
 - **验收怎么验**：门禁四项全过 + 用户签字（你）
+- **收尾核对（2026-11-05）**：四项中 ①③④ 有实测证据；**缺** ②「17 场景输出与 legacy 比对留档」与你的签字，故不标完成。
 - **难度**：⭐⭐
 
 ---

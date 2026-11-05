@@ -41,6 +41,7 @@
 | 22 | `evals/seed.sql` 实为 SQLite 3 二进制库（非文本 SQL，122880 字节），且无 sha256 指纹，评估结果不可复现与留档 | `evals/seed.sql`；`evals/golden_set.yaml` 的 `meta.seed_file` | 暂按现有二进制库使用，不在 V4.0 改格式；T-4.1.8 在评估结果中记录 seed 的 sha256，必要时改为文本 dump + manifest；来源：T-4.0.7 评估现状分析 | 你 |
 | 23 | `config/semantic_view.yaml` 的 `fact_application` 只声明 8 列，缺 `y / score_v2 / score_v3`；KS/AUC/PSI 的纯函数依赖 `y`，慢路白名单会拒掉合法 SQL（Q013 的 `score_v3` 首当其冲） | `config/semantic_view.yaml` L57；`src/riskqa/calc/metrics.py`；`evals/seed.sql`；`docs/archaeology-report.md` C-04 | 保持现状不直接改 config（P-15 与签字流程）；默认路径：V4.1 慢路定型前补列，可能需 Owner 签字；来源：T-4.0.9 口径考古 | 你 |
 | 24 | 验收引用的「落地方案 §4.3」不在仓库，四指标（证据率/冲突清零率/考古发现率/人审时长）精确定义无法核对 | `docs/tasks.md` T-4.0.9；`docs/constraints.md` L66；`docs/archaeology-report.md` 第五节 | 暂按「证据率 = 带 `文件:行` 证据的候选数 / 候选总数」自定可判定口径；Owner 确认后替换，不改已写结论；来源：T-4.0.9 口径考古 | 你 |
+| 25 | `docs/tasks.md` 与 `docs/releases.md` 范围不一致：V4.0 任务含 T-4.0.4（数仓真实导出）与 T-4.0.9（口径考古/Owner 签字），而 releases V4.0 退出门禁只有四项（测试/比对/语义层/SQLite）；另 T-4.0.7 的 CI 载体写作「内网 webhook 或 pre-commit」，实际为 GitHub Actions | `docs/tasks.md`；`docs/releases.md` V4.0；`.github/workflows/ci.yml` | 不改 releases（它是版本范围唯一来源）；V4.0 是否必须完成 T-4.0.4/T-4.0.9 待你确认；CI 载体以实际 GitHub Actions 为准，已在 T-4.0.7 收尾核对注明；来源：T-4.0.10 收尾核对 | 你 |
 
 ---
 
@@ -59,7 +60,7 @@
 ---
 
 <!-- AUTO-COLLECT:BEGIN -->
-### 🤖 自动汇总（2026-11-04 · 共 0 处）
+### 🤖 自动汇总（2026-11-05 · 共 0 处）
 
 扫描根目录：`/Users/tj/Documents/trae_projects/风控问数系统`
 
