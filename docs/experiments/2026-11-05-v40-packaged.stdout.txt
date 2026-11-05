@@ -1,0 +1,24 @@
+V2-1 | route=fast metric=fpd30_rate fid=F0001 value=0.2859042553191489 segment=overall passed=True
+V2-2 | route=slow sql=SELECT channel, AVG(is_fpd30) FROM fact_application WHERE (channel = 'A') AND is_pass = 1 GROUP BY channel LIMIT 10 facts=[('channel=A', 0.2239)] passed=True
+V2-3 | pending=True interrupt={'action': 'run_sql', 'args': {'sql': 'SELECT a.channel, AVG(a.is_fpd30) FROM fact_application a JOIN dim_channel b ON a.channel = b.channel GROUP BY a.channel LIMIT 10'}, 'description': '高风险 SQL，请审核：accept / edit / response', 'review_level': 'must'} trace=['entry_route', 'slow_list_tables', 'slow_get_schema', 'slow_check_sufficient', 'slow_generate', 'slow_execute(degraded)', 'slow_narrative', 'merge_verify(fallback)'] audit_last=('accept', 'must') audit_total=2 passed=False failures=[('fabricated_ref', 'F0001 不存在——模型编造了引用')]
+V2-4 | check_violations=['缺少 LIMIT——全表结果集禁止直接返回'] passed=False failures=[('step_limit', 6)] narrative=[失败] 慢路未在步数上限内收敛，拒绝交付半成品
+V2-5 | wrong=fpd30_rate@channel=A: 快路 0.223919 vs 慢路 0.146179 不一致（rtol=1e-06）——两条路有一条口径错了，禁止交付 || right=fpd30_rate@channel=A: 0.223919 == 0.223919 ✓
+V2-6 | event={'metric': 'fpd30_rate', 'value': 0.2859042553191489, 'threshold': 0.25, 'segment': 'overall'} confirmed=['B 渠道逾期偏高拉高整体'] excluded=['P2 产品逾期恶化'] needs_human_confirm=True
+V2-7 | table:
+strategy       ks      auc      as_of
+score_v3 0.159452 0.411955 2026-09-30
+score_v2 0.086003 0.514925 2026-09-30
+narrative=回测完成（数据截止 2026-09-30，样本 1200 条）。各策略 KS/AUC 见对比表。
+[禁入区声明] 本报告仅呈现多策略对比与已知风险（过拟合历史、样本外衰减），"上哪个策略"的决策必须由人做出——Agent 不得输出策略建议。
+V2-8 | PASS 整体 FPD30 是多少 期望 0.285904 实际 0.285904 || PASS A 渠道 FPD30 是多少 期望 0.223919 实际 0.223919 || PASS 整体通过率是多少 期望 0.626667 实际 0.626667 通过率 3/3
+V2-9 | degraded={'action': {'metric': 'fpd30_rate'}, '_degraded_reason': '规则映射：问题含 FPD30', '_degraded': 'LLM 不可用（TimeoutError），已降级：规则映射：问题含 FPD30'} | verify passed=False failures=[('fabricated_ref', 'F9999 不存在——模型编造了引用'), ('render_mismatch', 'F0001', 'fpd30_rate@overall 报告 0.28 vs 重算 0.2859042553191489')]
+V3-1 | raw_min_users=3 effective_min_users=2 window=30 retention=365 domain_min_users=5 护栏拦截：治理配置未过护栏，拒绝加载：热度窗口 > 保留期限：窗口内数据已被删除，热度永远算不出
+V3-2 | logs=199 signatures=6 ratio=33.2 sizes=[92, 47, 30, 16, 12, 2] variants=[6, 5, 1, 2, 1, 1] keys=['loan_amt|product|product|all', 'fpd30_rate|channel|is_pass|all', 'fpd30_rate|product|is_pass|all', 'fpd30_rate|channel||all', 'pass_rate|channel||all', 'pass_rate|vintage||all']
+V3-3 | nominated=['loan_amt|product|product|all', 'fpd30_rate|channel|is_pass|all', 'fpd30_rate|channel||all', 'pass_rate|vintage||all'] blocked=['fpd30_rate|product|is_pass|all', 'pass_rate|channel||all'] hot=(30, 6, 28) hot_share=83% hot_reason=单人占比 83% 超上限，疑似日报刷量 batch_days=2 batch_reason=查询集中在 2 个自然日，疑似会议批量，不计热度
+V3-4 | conflicts=[('fpd30_rate', 93, {'AVG(is_fpd30) # is_pass=?': 77, 'AVG(is_fpd30) # NOWHERE': 16})]
+V3-5 | line0=# 待评审指标：fpd30_rate line1=## 全景（93 次查询，10 位用户，28 天，8 种问法，3 个签名，2 种口径） warn_count=1 has_question=True has_qid=True
+V3-6 | owner=风控策略组·王五 dims=['product'] aliases=6 n_queries=92 n_users=9 review_record=R-2026-090 | 拒算 UnregisteredMetricError: 指标 'loan_amt' 未登记，已登记：['auc', 'fpd30_rate', 'ks', 'pass_rate', 'psi'] | 注册后 loan_amt=596.0
+V3-7 | statuses=['pending_review', 'reminded', 'overdue', 'shelved'] last_history=2026-10-25 09:00 → shelved
+V3-8 | aliases=['loan_amt', 'loan_amt', 'loan_amt']
+V2-SUM | trace_nodes=47 audit_entries=2 cost_tokens=5498 version=2.0 metric_enum=['auc', 'fpd30_rate', 'ks', 'pass_rate', 'psi'] ai_disclosure=<!-- AI-GENERATED · 需人工复核 · 模型:fake-cheap · 数据截止:2026-09-30 · 本内容由大模型生成，数字经 Python 独立重算校验 -->
+probe: 17 场景断言全部通过

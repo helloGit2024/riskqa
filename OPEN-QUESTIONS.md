@@ -42,6 +42,8 @@
 | 23 | `config/semantic_view.yaml` 的 `fact_application` 只声明 8 列，缺 `y / score_v2 / score_v3`；KS/AUC/PSI 的纯函数依赖 `y`，慢路白名单会拒掉合法 SQL（Q013 的 `score_v3` 首当其冲） | `config/semantic_view.yaml` L57；`src/riskqa/calc/metrics.py`；`evals/seed.sql`；`docs/archaeology-report.md` C-04 | 保持现状不直接改 config（P-15 与签字流程）；默认路径：V4.1 慢路定型前补列，可能需 Owner 签字；来源：T-4.0.9 口径考古 | 你 |
 | 24 | 验收引用的「落地方案 §4.3」不在仓库，四指标（证据率/冲突清零率/考古发现率/人审时长）精确定义无法核对 | `docs/tasks.md` T-4.0.9；`docs/constraints.md` L66；`docs/archaeology-report.md` 第五节 | 暂按「证据率 = 带 `文件:行` 证据的候选数 / 候选总数」自定可判定口径；Owner 确认后替换，不改已写结论；来源：T-4.0.9 口径考古 | 你 |
 | 25 | `docs/tasks.md` 与 `docs/releases.md` 范围不一致：V4.0 任务含 T-4.0.4（数仓真实导出）与 T-4.0.9（口径考古/Owner 签字），而 releases V4.0 退出门禁只有四项（测试/比对/语义层/SQLite）；另 T-4.0.7 的 CI 载体写作「内网 webhook 或 pre-commit」，实际为 GitHub Actions | `docs/tasks.md`；`docs/releases.md` V4.0；`.github/workflows/ci.yml` | 不改 releases（它是版本范围唯一来源）；V4.0 是否必须完成 T-4.0.4/T-4.0.9 待你确认；CI 载体以实际 GitHub Actions 为准，已在 T-4.0.7 收尾核对注明；来源：T-4.0.10 收尾核对 | 你 |
+| 26 | V3 迁移后「未登记指标」的异常类型由 `ValueError` 变为 `UnregisteredMetricError`（后者不是 `ValueError` 子类），沿用 `except ValueError` 的调用方不再捕获；拒算结论本身未变 | `legacy/问数Agent_持续运营V3.py`；`src/riskqa/semantic/layer.py`；`src/riskqa/calc/metrics.py`；`docs/experiments/2026-11-05-v40-equivalence.md` V3-6 | 保留 `UnregisteredMetricError`（P-04 要求显式拒服）；V4.1 起统一按新类型捕获；若需兼容旧调用方，先确认再改 | 你 |
+| 27 | `fpd30_rate` 的 `desc` 文案在 legacy V2 与 `config/semantic_view.yaml` 中不同（后者多「（分母=放款户，宽限期 3 天）」16 字符），使慢路 prompt 变长、估算 token 成本 5394→5498（+1.9%）；指标数值与判定均未变 | `config/semantic_view.yaml`；`legacy/问数Agent_企业版V2.py`；`docs/experiments/2026-11-05-v40-equivalence.md` §五-2 | 口径描述以 config 为准（信息更完整），成本差异仅为估算值；若要求与 legacy 字面一致，请确认后改 desc | 你 |
 
 ---
 
