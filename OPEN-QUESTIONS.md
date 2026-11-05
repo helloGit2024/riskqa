@@ -37,6 +37,8 @@
 | 17 | `Fact.data_as_of` 在内存版 `Fact` 中存在，但 `docs/data-model.md` §2.2 的 `fact` 表没有该列；T-4.0.3 按文档不落库，由 `SqliteFactStore` 构造器/manifest 提供 | `src/riskqa/facts/store.py`；`src/riskqa/store/facts.py`；`docs/data-model.md` §2.2 | 不落库（以文档为准，避免自创列）；默认路径：T-4.0.4 manifest 实战时确认 data_as_of 的最终归属，再决定是否补列/走 manifest；来源：T-4.0.3 | 你 |
 | 18 | Parquet 快照未实现：本机 `pyarrow`/`fastparquet` 均未安装，`write_snapshot(fmt="parquet")` 与 `load_snapshot_file` 遇到 parquet 会抛 `ParquetEngineMissingError`。C-2 已确认格式为 CSV/Parquet，但 V4.0 本批只交付 CSV | `src/riskqa/data/snapshot.py`；`docs/constraints.md` §三（单文件 ≤500MB、100 万—500 万行） | T-4.0.5 已定：`requirements.txt` 不含 pyarrow（R16 未批准），Parquet 继续显式抛错；待 V4.1 前评估；来源：T-4.0.4 → T-4.0.5 | 运维/你 |
 | 20 | GitHub 仓库是否允许保持公开？公开仓库的 Actions 日志与门禁输出是否可对外可见？ | `.github/workflows/ci.yml`；T-4.0.7 A 方案 | 不擅自变更远端可见性；CI 只运行 demo 合成数据、测试与文档校验，确认前不接真实指标、raw log 或密钥；若日志不允许公开，应先转私有仓库再使用 Actions | 你 |
+| 21 | `Makefile` 的 `eval` target 守卫失效：守卫只检查 `tests/` 是否存在（该目录一直存在），实际执行会因 `riskqa.orchestration.eval_runner` 不存在抛 `ModuleNotFoundError` | `Makefile` 的 `eval` target；T-4.1.8 | 保持现状不修（V4.0 不做评估 runner）；T-4.1.8 建 runner 时改为检查模块文件是否存在，并补 `PYTHONPATH=src`；来源：T-4.0.7 评估现状分析 | 你 |
+| 22 | `evals/seed.sql` 实为 SQLite 3 二进制库（非文本 SQL，122880 字节），且无 sha256 指纹，评估结果不可复现与留档 | `evals/seed.sql`；`evals/golden_set.yaml` 的 `meta.seed_file` | 暂按现有二进制库使用，不在 V4.0 改格式；T-4.1.8 在评估结果中记录 seed 的 sha256，必要时改为文本 dump + manifest；来源：T-4.0.7 评估现状分析 | 你 |
 
 ---
 
