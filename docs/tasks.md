@@ -43,6 +43,7 @@
 - **涉及文件**：`src/riskqa/data/`、`data/snapshots/`
 - **验收怎么验**：demo 数据 + 真实导出各跑一次 load_snapshot，manifest 字段齐全；归一化前后行数不变
 - **收尾核对（2026-11-05）**：**缺** Parquet 加载（OPEN-QUESTIONS #18）与数仓真实导出（#2）；demo CSV 往返已通过，故不标完成。
+- **版本归属**：V4.0 辅助任务，**非四项退出门禁**；未完成部分（Parquet 加载、数仓真实宽表）在 V4.1 启动时重新排期，不改变 V4.1 范围。
 - **难度**：⭐⭐
 
 #### T-4.0.5 · requirements.txt 与依赖锁定 ✅（2026-11-05）
@@ -62,12 +63,12 @@
 - **难度**：⭐⭐⭐
 
 #### T-4.0.7 · Makefile 与 CI 门禁
-- **做的事情**：落地 Makefile 的 V4.0 目标（test/lint/semantic-check/governance-check/docs-check）并**当天实跑**；CI（内网 Git 服务 webhook 或 pre-commit）接 QG-01/03/04。
+- **做的事情**：落地 Makefile 的 V4.0 目标（test/lint/semantic-check/governance-check/docs-check）并**当天实跑**；CI 接 QG-01/03/04。实际载体为 GitHub Actions（`.github/workflows/ci.yml`）；原写的「内网 Git 服务 webhook 或 pre-commit」未采用。
 - **对应验收标准**：QG-01/03/04
 - **依赖**：T-4.0.5/6/2
 - **涉及文件**：`Makefile`、CI 配置
 - **验收怎么验**：每个 target 当天实跑一次并通过；CI 红一次故意失败的提交验证门禁会拦
-- **收尾核对（2026-11-05）**：`make ci` 全过，GitHub Actions 有 success run，本地三项故障注入均被拦截；**缺**线上「故意失败提交」的一次红色 run（未推送），故保留未完成。
+- **收尾核对（2026-11-05）**：`make ci` 全过，GitHub Actions 有 success run，本地三项故障注入均被拦截；线上「故意失败提交」的红色 run 按用户决定不做，故本任务保留未完成（不列入 V4.1 待办）。
 - **难度**：⭐⭐
 
 #### T-4.0.8 · 仓库初始化与规则入口确认 ✅（2026-11-05）
@@ -85,6 +86,7 @@
 - **涉及文件**：`docs/archaeology-report.md`（新）、`config/semantic_view.yaml`（签字后）
 - **验收怎么验**：证据率 ≥90%；每个冲突点变成给 Owner 的具体问题；人审单条 <2 分钟
 - **收尾核对（2026-11-05）**：`docs/archaeology-report.md` 已完成（79 处文件:行证据、6 条冲突、5 个 Owner 问题）；**缺** Owner 签字、四指标定义（OPEN-QUESTIONS #24）、人审时长实测，故不标完成。
+- **版本归属**：V4.0 辅助任务，**非四项退出门禁**；Owner 签字与四指标定义（OPEN-QUESTIONS #24）待确认，遗留至 V4.1 启动时重新排期。
 - **难度**：⭐⭐⭐
 
 #### T-4.0.10 · V4.0 退出评审 ✅（2026-11-05）
@@ -93,7 +95,7 @@
 - **依赖**：T-4.0.1—9
 - **涉及文件**：`docs/experiments/2026-xx-xx-v40-baseline.md`
 - **验收怎么验**：门禁四项全过 + 用户签字（你）
-- **收尾核对（2026-11-05）**：四项均有实测证据（② 见 `docs/experiments/2026-11-05-v40-equivalence.md`）；用户签字确认结版；三条缺口（T-4.0.4、T-4.0.7、T-4.0.9）带入 V4.1。
+- **收尾核对（2026-11-05）**：四项均有实测证据（② 见 `docs/experiments/2026-11-05-v40-equivalence.md`）；用户签字确认结版；T-4.0.4 / T-4.0.9 为辅助任务，遗留至 V4.1 重新排期；T-4.0.7 的线上红色 run 按用户决定不做（不列入待办）。
 - **难度**：⭐⭐
 
 ---

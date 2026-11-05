@@ -41,7 +41,6 @@
 | 22 | `evals/seed.sql` 实为 SQLite 3 二进制库（非文本 SQL，122880 字节），且无 sha256 指纹，评估结果不可复现与留档 | `evals/seed.sql`；`evals/golden_set.yaml` 的 `meta.seed_file` | 暂按现有二进制库使用，不在 V4.0 改格式；T-4.1.8 在评估结果中记录 seed 的 sha256，必要时改为文本 dump + manifest；来源：T-4.0.7 评估现状分析 | 你 |
 | 23 | `config/semantic_view.yaml` 的 `fact_application` 只声明 8 列，缺 `y / score_v2 / score_v3`；KS/AUC/PSI 的纯函数依赖 `y`，慢路白名单会拒掉合法 SQL（Q013 的 `score_v3` 首当其冲） | `config/semantic_view.yaml` L57；`src/riskqa/calc/metrics.py`；`evals/seed.sql`；`docs/archaeology-report.md` C-04 | 保持现状不直接改 config（P-15 与签字流程）；默认路径：V4.1 慢路定型前补列，可能需 Owner 签字；来源：T-4.0.9 口径考古 | 你 |
 | 24 | 验收引用的「落地方案 §4.3」不在仓库，四指标（证据率/冲突清零率/考古发现率/人审时长）精确定义无法核对 | `docs/tasks.md` T-4.0.9；`docs/constraints.md` L66；`docs/archaeology-report.md` 第五节 | 暂按「证据率 = 带 `文件:行` 证据的候选数 / 候选总数」自定可判定口径；Owner 确认后替换，不改已写结论；来源：T-4.0.9 口径考古 | 你 |
-| 25 | `docs/tasks.md` 与 `docs/releases.md` 范围不一致：V4.0 任务含 T-4.0.4（数仓真实导出）与 T-4.0.9（口径考古/Owner 签字），而 releases V4.0 退出门禁只有四项（测试/比对/语义层/SQLite）；另 T-4.0.7 的 CI 载体写作「内网 webhook 或 pre-commit」，实际为 GitHub Actions | `docs/tasks.md`；`docs/releases.md` V4.0；`.github/workflows/ci.yml` | 不改 releases（它是版本范围唯一来源）；V4.0 是否必须完成 T-4.0.4/T-4.0.9 待你确认；CI 载体以实际 GitHub Actions 为准，已在 T-4.0.7 收尾核对注明；来源：T-4.0.10 收尾核对 | 你 |
 | 26 | V3 迁移后「未登记指标」的异常类型由 `ValueError` 变为 `UnregisteredMetricError`（后者不是 `ValueError` 子类），沿用 `except ValueError` 的调用方不再捕获；拒算结论本身未变 | `legacy/问数Agent_持续运营V3.py`；`src/riskqa/semantic/layer.py`；`src/riskqa/calc/metrics.py`；`docs/experiments/2026-11-05-v40-equivalence.md` V3-6 | 保留 `UnregisteredMetricError`（P-04 要求显式拒服）；V4.1 起统一按新类型捕获；若需兼容旧调用方，先确认再改 | 你 |
 | 27 | `fpd30_rate` 的 `desc` 文案在 legacy V2 与 `config/semantic_view.yaml` 中不同（后者多「（分母=放款户，宽限期 3 天）」16 字符），使慢路 prompt 变长、估算 token 成本 5394→5498（+1.9%）；指标数值与判定均未变 | `config/semantic_view.yaml`；`legacy/问数Agent_企业版V2.py`；`docs/experiments/2026-11-05-v40-equivalence.md` §五-2 | 口径描述以 config 为准（信息更完整），成本差异仅为估算值；若要求与 legacy 字面一致，请确认后改 desc | 你 |
 
@@ -58,6 +57,7 @@
 | C-5 | 归因/回测是否沉淀 SQL 为语义层指标？ | 否（V3 已确认边界：只做指标问数运营化） | 2026-11-01 |
 | C-6 | （原 #11）`row_policies` 扁平字符串导致 `row_filter(role, table)` 抛 `AttributeError`，行级权限不可用 | 随 T-4.0.2 外置 YAML 时规范为 `{role: {table: 条件}}` 两层结构；`semantic-check` 增加结构断言，扁平常量会被拒绝 | 2026-11-04 |
 | C-7 | （原 #19）本机 Python 环境版本与早前记录不一致：曾实测 pandas 3.1.0 / numpy 2.5.4，早前迁移记录为 pandas 2.0.3 | T-4.0.5 锁定 `pandas==2.2.3 / numpy==2.2.6`（Python 3.13.12），重建 `.venv` 后快照往返重验通过；`normalize_missing` 保留 `StringDtype` 分支（2.2.3 下不触发）。注意 `hash_pandas_object` 跨大版本不保证一致，已有快照换环境需重跑往返 | 2026-11-04 |
+| C-8 | （原 #25）`docs/tasks.md` 与 `docs/releases.md` 对 T-4.0.4 / T-4.0.7 / T-4.0.9 的描述口径不一致 | 已对齐：T-4.0.4 / T-4.0.9 在 tasks 标注为「V4.0 辅助任务、非四项退出门禁」，releases 结版记录同步限定；T-4.0.7 的 CI 载体在 tasks 写明实际为 GitHub Actions，线上红色 run 按用户决定不做、不列入待办。**未改任何验收标准、未改 V4.1/V4.2/V4.3 范围** | 2026-11-05 |
 
 ---
 
