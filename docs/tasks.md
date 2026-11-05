@@ -85,7 +85,7 @@
 - **依赖**：T-4.0.2；外部：Owner 时间（A-06）
 - **涉及文件**：`docs/archaeology-report.md`（新）、`config/semantic_view.yaml`（签字后）
 - **验收怎么验**：证据率 ≥90%；每个冲突点变成给 Owner 的具体问题；人审单条 <2 分钟
-- **收尾核对（2026-11-05）**：`docs/archaeology-report.md` 已完成（79 处文件:行证据、6 条冲突、5 个 Owner 问题）；**缺** Owner 签字、四指标定义（OPEN-QUESTIONS #24）、人审时长实测，故不标完成。
+- **收尾核对（2026-11-05）**：`docs/archaeology-report.md` 已完成（79 处文件:行证据、6 条冲突、5 个 Owner 问题），第六节记录 Owner 签字结果（S-01—S-08 按推荐项、S-09=A）；**仍缺** ①外部落地方案与四指标定义（OPEN-QUESTIONS #24）②人审 2 分钟实测，故不标完成。
 - **版本归属**：V4.0 辅助任务，**非四项退出门禁**；Owner 签字与四指标定义（OPEN-QUESTIONS #24）待确认，遗留至 V4.1 启动时重新排期。
 - **难度**：⭐⭐⭐
 
