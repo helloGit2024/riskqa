@@ -182,3 +182,39 @@ d3047f032c9201c13a8d1a88520cb3a8b59d169249cbbda3ef0408e5b358159f  evals/golden_s
 **默认取数范围（用户给定）**：由用户给定取数条件（如产品编号、时间范围）；默认从数仓拉取近 30 天 A 产品数据并计算指标。
 
 > 注意：这是**取数范围约定，不是 `y` 的推导规则**。当前 config 无字段承载该约定，已登记 OPEN-QUESTIONS #28。
+
+---
+
+## 七、冲突裁决账（2026-11-05）
+
+> 核对基准：第二节 C-01—C-06 原文。判定标准：冲突在 `config/semantic_view.yaml` 已有唯一确定取值，且签字单或 changelog 能指认决定来源；“只登记 OPEN-QUESTIONS”或“推迟到 V4.1”不算已裁决。
+
+| 编号 | 一句话描述 | 涉及指标/字段 | 裁决状态 | 裁决结论与依据 | 落地位置 |
+|---|---|---|---|---|---|
+| C-01 | fpd30 有三种算法：放款户 `is_fpd30`=0.285904 / 全量=0.179167 / 金融版 `y` 均值=0.175 | `fpd30_rate` | **已裁决** | S-01=A：分母=放款户（`is_pass=1`）；金融版 `y` 均值口径作废。全量 0.179167 仅保留为 Q011 禁列反例，不是生产口径 | [`config` L6-15](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L6-L15)；[`calc/metrics.py` L13-17](file:///Users/tj/Documents/trae_projects/风控问数系统/src/riskqa/calc/metrics.py#L13-L17) |
+| C-02 | `analyst_qa` 行权限是仅 A（config/V2），还是 A/B/C 全开（V3） | `row_policies.analyst_qa.fact_application` | **已裁决** | S-02=A：仅 A 渠道，保持现状 | [`config` L69-73](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L69-L73) |
+| C-03 | `y` 与 `is_fpd30` 标签混用：语义层未登记 `y` | `y`、`is_fpd30`；KS/AUC/PSI | **已裁决** | S-03=A：`y` 是独立坏样本标签，不是 `is_fpd30` 别名；KS/AUC/PSI 用 `y`，FPD30 用 `is_fpd30` | [`config` L62](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L62)、L27-55；[`calc/metrics.py` L23-52](file:///Users/tj/Documents/trae_projects/风控问数系统/src/riskqa/calc/metrics.py#L23-L52) |
+| C-04 | `tables.columns` 声明 8 列，seed 实际 11 列，缺 `y/score_v2/score_v3` | `tables.fact_application.columns` | **已裁决** | S-03/S-04 签字补列，OPEN-QUESTIONS #23 → C-9 | [`config` L62](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L62) |
+| C-05 | 未签字样本：V1 三个指标、金融版四个指标缺 owner/signed_at/changelog 或口径不同 | V1 `fpd30/pass_rate/avg_score`；金融版 `fpd30_rate/ks/auc/psi` | **部分裁决** | S-01 只作废金融版 fpd30 的 `y` 均值口径，**未逐条裁决** V1 的 `avg_score` 与两版其余候选；按第五节仍只存档、不入 config，故无唯一取值 | 第五节第 1 条；第六节 S-01 |
+| C-06 | `auc` / `psi` 的 `changelog: []`，签字口径无版本轨迹 | `auc`、`psi` 的 changelog | **已裁决** | S-08 补录 `auc` v1.0（秩比较、平局 0.5）+ v1.1；S-09=A 为 `psi` 追加 v1.1（描述修正） | [`config` L37-55](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L37-L55) |
+
+### 7.1 冲突清零率
+
+- 总冲突：6（C-01—C-06）
+- 已裁决：5（C-01、C-02、C-03、C-04、C-06）
+- 部分裁决：1（C-05）
+- **冲突清零率 = 5 / 6 = 83.3%**（目标 100%，**未达标**）
+
+差在 C-05：V1 的 `avg_score` 不在当前 5 指标内、未登记也未书面裁决；金融版除 fpd30 外的 `ks/auc/psi` 未逐条书面作废。要清零需 Owner 对这两版做一次「整体作废 / 保留为教学样本」的明确表态；本轮不替用户裁决。
+
+### 7.2 其余验收指标现状
+
+| 指标 | 现状 | 判定 |
+|---|---|---|
+| 证据率 | **100%（5 / 5 指标均有 `文件:行` 证据，共 79 处）** | ≥90% 达标 |
+| 考古发现率 | **6 条冲突（C-01—C-06）**；另有 5 条措辞差异（W-01—W-05）不计入 | 报告型计数，原文无阈值 |
+| 人审耗时 | **未实测**（用户决定不做实测） | 文档要求单条 <2 分钟；无实测数据，无法判定 |
+
+**阈值备注**：外部文档原文要求证据率「趋近 100%」；本项目验收沿用 `docs/tasks.md` 的 `≥90%`（**不改标准**），实测 100%。两者字面不同但本批实测满足更严的一方。
+
+**外部文档缺口已关闭**：第五节第 2 条所述「落地方案 §4.3 不在仓库」已由 [`docs/archaeology/s05-landing-plan.md`](file:///Users/tj/Documents/trae_projects/风控问数系统/docs/archaeology/s05-landing-plan.md) 的脱敏存档解决；原缺口记录保留为历史。
