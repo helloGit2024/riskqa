@@ -39,6 +39,8 @@
 | 20 | GitHub 仓库是否允许保持公开？公开仓库的 Actions 日志与门禁输出是否可对外可见？ | `.github/workflows/ci.yml`；T-4.0.7 A 方案 | 不擅自变更远端可见性；CI 只运行 demo 合成数据、测试与文档校验，确认前不接真实指标、raw log 或密钥；若日志不允许公开，应先转私有仓库再使用 Actions | 你 |
 | 21 | `Makefile` 的 `eval` target 守卫失效：守卫只检查 `tests/` 是否存在（该目录一直存在），实际执行会因 `riskqa.orchestration.eval_runner` 不存在抛 `ModuleNotFoundError` | `Makefile` 的 `eval` target；T-4.1.8 | 保持现状不修（V4.0 不做评估 runner）；T-4.1.8 建 runner 时改为检查模块文件是否存在，并补 `PYTHONPATH=src`；来源：T-4.0.7 评估现状分析 | 你 |
 | 22 | `evals/seed.sql` 实为 SQLite 3 二进制库（非文本 SQL，122880 字节），且无 sha256 指纹，评估结果不可复现与留档 | `evals/seed.sql`；`evals/golden_set.yaml` 的 `meta.seed_file` | 暂按现有二进制库使用，不在 V4.0 改格式；T-4.1.8 在评估结果中记录 seed 的 sha256，必要时改为文本 dump + manifest；来源：T-4.0.7 评估现状分析 | 你 |
+| 23 | `config/semantic_view.yaml` 的 `fact_application` 只声明 8 列，缺 `y / score_v2 / score_v3`；KS/AUC/PSI 的纯函数依赖 `y`，慢路白名单会拒掉合法 SQL（Q013 的 `score_v3` 首当其冲） | `config/semantic_view.yaml` L57；`src/riskqa/calc/metrics.py`；`evals/seed.sql`；`docs/archaeology-report.md` C-04 | 保持现状不直接改 config（P-15 与签字流程）；默认路径：V4.1 慢路定型前补列，可能需 Owner 签字；来源：T-4.0.9 口径考古 | 你 |
+| 24 | 验收引用的「落地方案 §4.3」不在仓库，四指标（证据率/冲突清零率/考古发现率/人审时长）精确定义无法核对 | `docs/tasks.md` T-4.0.9；`docs/constraints.md` L66；`docs/archaeology-report.md` 第五节 | 暂按「证据率 = 带 `文件:行` 证据的候选数 / 候选总数」自定可判定口径；Owner 确认后替换，不改已写结论；来源：T-4.0.9 口径考古 | 你 |
 
 ---
 
