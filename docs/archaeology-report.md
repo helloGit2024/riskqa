@@ -195,17 +195,18 @@ d3047f032c9201c13a8d1a88520cb3a8b59d169249cbbda3ef0408e5b358159f  evals/golden_s
 | C-02 | `analyst_qa` 行权限是仅 A（config/V2），还是 A/B/C 全开（V3） | `row_policies.analyst_qa.fact_application` | **已裁决** | S-02=A：仅 A 渠道，保持现状 | [`config` L69-73](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L69-L73) |
 | C-03 | `y` 与 `is_fpd30` 标签混用：语义层未登记 `y` | `y`、`is_fpd30`；KS/AUC/PSI | **已裁决** | S-03=A：`y` 是独立坏样本标签，不是 `is_fpd30` 别名；KS/AUC/PSI 用 `y`，FPD30 用 `is_fpd30` | [`config` L62](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L62)、L27-55；[`calc/metrics.py` L23-52](file:///Users/tj/Documents/trae_projects/风控问数系统/src/riskqa/calc/metrics.py#L23-L52) |
 | C-04 | `tables.columns` 声明 8 列，seed 实际 11 列，缺 `y/score_v2/score_v3` | `tables.fact_application.columns` | **已裁决** | S-03/S-04 签字补列，OPEN-QUESTIONS #23 → C-9 | [`config` L62](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L62) |
-| C-05 | 未签字样本：V1 三个指标、金融版四个指标缺 owner/signed_at/changelog 或口径不同 | V1 `fpd30/pass_rate/avg_score`；金融版 `fpd30_rate/ks/auc/psi` | **部分裁决** | S-01 只作废金融版 fpd30 的 `y` 均值口径，**未逐条裁决** V1 的 `avg_score` 与两版其余候选；按第五节仍只存档、不入 config，故无唯一取值 | 第五节第 1 条；第六节 S-01 |
+| C-05 | 未签字样本：V1 三个指标、金融版四个指标缺 owner/signed_at/changelog 或口径不同 | V1 `fpd30/pass_rate/avg_score`；金融版 `fpd30_rate/ks/auc/psi` | **已裁决**（2026-11-05） | 裁决结论：**整体作废、仅作教学反例**——V1 的 `avg_score`、金融版其余候选口径一律记为「已作废、不登记进语义层、不参与问数」，只保留作为 Q011 一类反例教学的参照。依据：S-01 已作废金融版 fpd30 分母口径 + AGENTS.md P-04「未登记指标一律拒绝」。**属文档层面记录，不改变任何取值与行为** | 本节第七节；[`OPEN-QUESTIONS.md` C-11](file:///Users/tj/Documents/trae_projects/风控问数系统/OPEN-QUESTIONS.md) |
 | C-06 | `auc` / `psi` 的 `changelog: []`，签字口径无版本轨迹 | `auc`、`psi` 的 changelog | **已裁决** | S-08 补录 `auc` v1.0（秩比较、平局 0.5）+ v1.1；S-09=A 为 `psi` 追加 v1.1（描述修正） | [`config` L37-55](file:///Users/tj/Documents/trae_projects/风控问数系统/config/semantic_view.yaml#L37-L55) |
 
 ### 7.1 冲突清零率
 
 - 总冲突：6（C-01—C-06）
-- 已裁决：5（C-01、C-02、C-03、C-04、C-06）
-- 部分裁决：1（C-05）
-- **冲突清零率 = 5 / 6 = 83.3%**（目标 100%，**未达标**）
+- 已裁决：6（C-01、C-02、C-03、C-04、C-05、C-06）
+- **冲突清零率 = 6 / 6 = 100%**（目标 100%，**达标**）
 
-差在 C-05：V1 的 `avg_score` 不在当前 5 指标内、未登记也未书面裁决；金融版除 fpd30 外的 `ks/auc/psi` 未逐条书面作废。要清零需 Owner 对这两版做一次「整体作废 / 保留为教学样本」的明确表态；本轮不替用户裁决。
+C-05 的裁决方式为**整体作废、仅作教学反例**：V1 的 `avg_score`、金融版其余候选口径一律记为「已作废、不登记进语义层、不参与问数」，只保留作为 Q011 一类反例教学的参照（依据：S-01 + P-04）。这是**文档层面的裁决**，未改动 `config/`、`calc/` 或任何数值。
+
+> 口径说明：本项清零率仅为**文档裁决层面**的完成度，不代表「双方（业务 + 数仓）签字」与「人审 2 分钟实测」已完成（后者两项见 OPEN-QUESTIONS #30 与第七节 7.2）。
 
 ### 7.2 其余验收指标现状
 
