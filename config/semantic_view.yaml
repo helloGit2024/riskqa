@@ -13,6 +13,7 @@ metrics:
     signed_at: "2026-09-30"
     changelog:
       - {date: "2026-09-30", version: v1.0, note: "初版：放款后30天DPD30+，宽限期3天"}
+      - {date: "2026-11-05", version: v1.1, note: "Owner 复核确认：分母为放款户（is_pass=1）；金融版 y 均值口径作废，数值未变"}
   - name: pass_rate
     desc: "通过率：审批通过申请数 / 提交申请数（分母口径：提交数，非通过数）"
     unit: ratio
@@ -24,37 +25,41 @@ metrics:
     changelog:
       - {date: "2026-09-30", version: v1.0, note: "初版：分母=提交申请数"}
   - name: ks
-    desc: "KS：好坏样本累计分布差的最大值（score 降序）"
+    desc: "KS：好坏样本累计分布差的最大值（score 降序）；坏样本标签为 y，评分列为 score（正式列，与 score_v3 同值，score_v2 为历史列）"
     unit: ratio
     dims: [vintage]
     calc: ks
     owner: 模型组
-    signed_at: "2026-09-30"
+    signed_at: "2026-11-05"
     changelog:
       - {date: "2026-09-30", version: v1.0, note: "初版：OOT 样本上计算"}
+      - {date: "2026-11-05", version: v1.1, note: "明确标签 y 与正式评分列 score；数值未变"}
   - name: auc
-    desc: "AUC：ROC 曲线下面积"
+    desc: "AUC：ROC 曲线下面积；坏样本标签为 y，评分列为 score（正式列，与 score_v3 同值，score_v2 为历史列）"
     unit: ratio
     dims: [vintage]
     calc: auc
     owner: 模型组
-    signed_at: "2026-09-30"
-    changelog: []
+    signed_at: "2026-11-05"
+    changelog:
+      - {date: "2026-09-30", version: v1.0, note: "初版：秩比较，平局计 0.5"}
+      - {date: "2026-11-05", version: v1.1, note: "明确标签 y 与正式评分列 score；数值未变"}
   - name: psi
-    desc: "PSI：分数分布稳定性（期望 vs 实际，10 等宽分箱）"
+    desc: "PSI：好坏样本分数分布差（y==1 与 y==0 两组，10 等宽分箱，Σ(a−e)·ln(a/e)）；坏样本标签为 y，评分列为 score（正式列，与 score_v3 同值，score_v2 为历史列）"
     unit: ratio
     dims: [vintage]
     calc: psi
     owner: 模型组
-    signed_at: "2026-09-30"
-    changelog: []
+    signed_at: "2026-11-05"
+    changelog:
+      - {date: "2026-11-05", version: v1.1, note: "描述修正：实现为好坏样本(y==1 vs y==0)分数分布差，非期望/实际；数值未变"}
 
 # 慢路可用表白名单：text-to-SQL 只能在这些表里选，且必须带口径上下文
 tables:
   - name: fact_application
     desc: "申请事实表（清洗后）"
     base_table: dwd.fact_application
-    columns: [apply_id, customer_id, channel, product, vintage, is_pass, is_fpd30, score]
+    columns: [apply_id, customer_id, channel, product, vintage, is_pass, is_fpd30, score, score_v2, score_v3, y]
     risk_level: high
   - name: dim_channel
     desc: "渠道维度表"
