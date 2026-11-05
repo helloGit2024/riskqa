@@ -28,6 +28,25 @@
 
 **✓ 退出门禁**：① `make test` 全绿且覆盖 V2/V3 全部 17 个场景；② V2/V3 迁入前后输出逐场景比对一致（golden 输出留档）；③ YAML 外置后 `make semantic-check` 通过（5 指标卡三字段齐全）；④ SQLite 六表建成，raw log 落库→读出往返一致。
 
+### V4.0 结版记录（2026-11-05，用户签字确认）
+
+**四条硬门禁的通过证据**
+
+1. legacy 迁包 + 行为等价 → `docs/experiments/2026-11-05-v40-equivalence.md`（15 逐字节相同 / 1 顺序差异 / 1 真实差异，见 OPEN-QUESTIONS #26）。
+2. YAML 外置 → `make semantic-check` / `make governance-check` 通过。
+3. SQLite 六表 + store → `tests/unit/test_store_smoke.py` 覆盖幂等建表、append-only、保留期、fact 往返。
+4. tests 17 场景 → `make test`：51 passed / 1 xfailed / 0 skip。
+
+另附：`make ci` 全绿；GitHub Actions 有一次 success run；四个 legacy 文件仅作只读存档，仓库无代码引用。
+
+**已知缺口（带入 V4.1，不影响 V4.0 收口）**
+
+- T-4.0.4：Parquet 未装（新依赖待批，R16）+ 数仓真实宽表待 OPEN-QUESTIONS #2。
+- T-4.0.7：缺线上「故意失败提交」的红色 run（按用户决定不做）。
+- T-4.0.9：Owner 未签字、四指标定义缺外部文档（OPEN-QUESTIONS #24）、人审 2 分钟未实测。
+
+本结版为**文档级签字**，未改变任何代码、配置与计算口径。
+
 ## 三、V4.1 问数闭环
 
 **✅ 做什么**
