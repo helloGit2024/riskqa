@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import pytest
+
 import riskqa.tools.dispatch as dispatch_mod
 from riskqa.facts.store import FactStore
 from riskqa.orchestration.graph_qa import sql_execute
-from riskqa.tools.gates import check_sql, inject_row_filter
+from riskqa.tools.gates import (
+    RowFilterParseError,
+    apply_row_filter,
+    check_sql,
+    inject_row_filter,
+)
 
 
 def test_check_sql_accepts_readonly_with_limit():
@@ -35,6 +42,56 @@ def test_check_sql_rejects_cartesian_product():
     verdict = check_sql("SELECT channel, AVG(is_fpd30) FROM fact_application, dim_channel LIMIT 10")
     assert verdict.ok is False
     assert any("笛卡尔积" in v for v in verdict.violations)
+
+
+def test_check_sql_rejects_injection_signatures():
+    """闸③：UNION / 分号 / 注释 / xp_ / INTO OUTFILE 一律拒（SG-01 #4）。"""
+    cases = {
+        "UNION": "SELECT channel, AVG(is_fpd30) FROM fact_application LIMIT 10 "
+        "UNION SELECT channel, AVG(is_fpd30) FROM fact_application LIMIT 10",
+        "分号": "SELECT channel, AVG(is_fpd30) FROM fact_application LIMIT 10; DROP TABLE fact",
+        "行注释": "SELECT channel, AVG(is_fpd30) FROM fact_application -- LIMIT 10",
+        "块注释": "SELECT channel, AVG(is_fpd30) FROM fact_application /* x */ LIMIT 10",
+        "xp_": "SELECT channel, AVG(is_fpd30) FROM fact_application LIMIT 10 xp_cmdshell('whoami')",
+        "INTO OUTFILE": "SELECT channel, AVG(is_fpd30) FROM fact_application "
+        "LIMIT 10 INTO OUTFILE '/tmp/x'",
+    }
+    for name, sql in cases.items():
+        verdict = check_sql(sql)
+        assert verdict.ok is False, name
+        assert any("注入特征" in v for v in verdict.violations), name
+
+
+def test_check_sql_rejects_non_select_whitelist():
+    """闸①：非 SELECT/WITH 的只读语句也拒（PRAGMA/ATTACH/EXPLAIN）。"""
+    for sql in (
+        "PRAGMA table_info(fact_application)",
+        "ATTACH DATABASE '/tmp/x.db' AS x",
+        "EXPLAIN SELECT channel FROM fact_application LIMIT 10",
+    ):
+        verdict = check_sql(sql)
+        assert verdict.ok is False
+        assert any("只允许 SELECT" in v for v in verdict.violations)
+
+
+def test_apply_row_filter_parses_equality_and_in(demo_df, semantic):
+    """快路行权限：等值/IN/AND 在计算前收窄；未知字段与非受限语法显式失败。"""
+    condition = semantic.row_filter("analyst_qa", "fact_application")
+    filtered = apply_row_filter(demo_df, condition)
+    assert set(filtered["channel"]) == {"A"}
+    assert len(filtered) < len(demo_df)
+
+    assert set(apply_row_filter(demo_df, "channel IN ('A', 'B')")["channel"]) == {"A", "B"}
+    assert set(apply_row_filter(demo_df, "is_pass = 1")["is_pass"]) == {1}
+    combined = apply_row_filter(demo_df, "channel = 'A' AND is_pass = 1")
+    assert set(combined["channel"]) == {"A"}
+    assert set(combined["is_pass"]) == {1}
+    assert apply_row_filter(demo_df, "") is demo_df
+
+    with pytest.raises(RowFilterParseError, match="不在数据列"):
+        apply_row_filter(demo_df, "ghost = 'A'")
+    with pytest.raises(RowFilterParseError, match="受限语法"):
+        apply_row_filter(demo_df, "score > 0.5")
 
 
 def test_inject_row_filter_inserts_or_ands_condition():
