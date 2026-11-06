@@ -110,3 +110,5 @@ CI 使用 Python 3.13，安装 `requirements.lock.txt` 后执行 `make ci`。本
 > 2026-11-04 本地 `make ci` 首跑通过。GitHub Actions 工作流已接入，线上结果应单独查询，不能用本地结果替代。
 
 > 2026-11-06 复核（QG-01）：`59 passed / 1 xfailed / 0 failed`（新增 T-4.1.1 alias 单测）；原 `51 passed` 记录保留，QG-01 状态仍 ✅。
+
+> 2026-11-06 注记（QG-02）：V4.0 的 17/17 行为等价基线**不变**（`docs/experiments/2026-11-05-v40-equivalence.md`）；V4.1 场景一因 P-10 行级权限在快路生效，冻结值按用户授权变更为 A 渠道值，**二者不可直接对比**。详见 `docs/tasks.md` T-4.1.4「验收相关变更记录」。

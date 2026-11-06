@@ -149,13 +149,25 @@
 - **验收怎么验**：慢路熔断 60s；修正轮数 ≤2；交叉验证不一致返回双侧数字（不平均）
 - **难度**：⭐⭐⭐⭐
 
-#### T-4.1.4 · SQL 三闸与行级权限
+#### T-4.1.4 · SQL 三闸与行级权限 ✅（2026-11-06）
 - **做的事情**：`check_sql`（SELECT 白名单/强制 LIMIT/注入特征）+ `inject_row_filter` 执行前注入 + 越权返回空结果。
 - **对应验收标准**：AGENTS P-10；security §三/§七
 - **依赖**：T-4.1.3
 - **涉及文件**：`src/riskqa/tools/sql_gate.py`
 - **验收怎么验**：SG-01 第 3/4 项通过；正反例进单元测试（data-model §三 两例）
+- **收尾核对（2026-11-06）**：闸① 强制 SELECT/WITH 开头，PRAGMA/ATTACH/DETACH/VACUUM/EXPLAIN/REPLACE 拒；闸② 强制 LIMIT 保留；闸③ UNION、分号、行/块注释、xp_、INTO OUTFILE、LOAD_FILE 一律拒；慢路 `inject_row_filter` 不变。快路新增 `apply_row_filter`，在 `compute_metric` **之前**按 `sem.row_filter(role, 'fact_application')` 收窄 df（P-10 / data-model §三）。越权或授权范围内无数据 → `AskResult(denied=True)` 空结果 + 审计、不报错；有行但 NaN → 仍抛 `NoFactError`，两分支不合并（R14）。`merge_verify` 改为按可见数据独立重算（否则快路事实会被全量重算判 `render_mismatch`）。实测：analyst 整体 0.22391857506361323（602/1200 行）、risk_admin 全量 0.2859042553191489、analyst 分渠道 1 条 fact、越权 `channel=Z` 返回空结果不报错。`make test` 79 passed / 1 xfailed；`make lint` 61 files formatted。路径偏差：按 D1-A 落在现有 `src/riskqa/tools/gates.py`，未新建 `sql_gate.py`（tasks 原文路径保留不改为宜，此处记录实际落点）。
+- **状态**：**✅ 达标（2026-11-06）** —— SG-01 #3/#4 均有实测用例；data-model §三正反例已覆盖；既有 17 场景全绿。
+- **已知限制**：`inject_row_filter` 的 `table` 参数未使用、正则可被注释/子查询绕过——按 R15 本轮**不修**；生产需接 SQL AST（如 sqlglot），属后续版本，未引入新依赖。`apply_row_filter` 仅支持等值/IN + AND，其他语法显式抛 `RowFilterParseError`（fail closed）。
 - **难度**：⭐⭐⭐
+
+##### 验收相关变更记录（2026-11-06，用户授权）
+
+- **变更断言**：`tests/scenario/test_v2_scenarios.py::test_v2_1_fast_path_returns_fact_and_passes_gates` 的冻结值，原 `0.2859042553191489` → `0.22391857506361323`。
+- **为什么变**：P-10 行级权限在快路生效，`analyst_qa` 角色按 `channel='A'` 在聚合前收窄，整体值即 A 渠道值（分母同步收窄，不是应用层过滤）。
+- **授权人 / 日期**：用户本人／2026-11-06。
+- **性质**：这是**行为变更，不是放宽标准**——阈值、口径、其他断言均未改动；旧全量数值改由新增 `tests/unit/test_fast_path.py::test_admin_sees_full_population` 继续守护。
+- **关联**：QG-02 注记（V4.0 的 17/17 等价基线不变，V4.1 场景一按 P-10 变更语义，二者不可直接对比）。
+
 
 #### T-4.1.5 · REST API v1（8 端点）
 - **做的事情**：FastAPI 实现 openapi.yaml 全 8 端点；token 认证 + 角色；错误码全集；只绑 127.0.0.1。
