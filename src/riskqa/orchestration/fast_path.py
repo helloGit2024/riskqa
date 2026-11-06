@@ -2,9 +2,8 @@
 
 边界（不是遗漏，是分工）：
 - 数值只由 `calc/` 纯函数产出，本模块不调用 LLM 算任何数（P-03）。
-- 行级权限（P-10）**不在本模块**：这里不对 df 做任何权限过滤，
-  由 T-4.1.4（SQL 三闸与行级权限）收口；缺口登记在 OPEN-QUESTIONS #33。
-  `role` 参数仅用于前闸留痕与调用方上下文，**不做数据过滤**。
+- 行级权限（P-10）：按角色在**计算前**收窄 df（等价 WHERE，禁止聚合后再过滤，
+  见 data-model §三）；条件语法不支持时显式失败（R14）。
 - 语义来源：`config/semantic_view.yaml`（P-15），代码不内嵌任何口径。
 """
 
@@ -20,6 +19,7 @@ import pandas as pd
 from ..calc.metrics import METRIC_FUNCS, compute_metric
 from ..facts.store import Fact, FactStore
 from ..semantic.layer import SemanticLayer, UnregisteredMetricError, UnsignedMetricError
+from ..tools.gates import apply_row_filter
 
 FACT_TABLE = "fact_application"
 
@@ -64,6 +64,7 @@ class AskResult:
     data_as_of: str
     ai_disclosure: bool = True  # P-16：所有出口带 AI 标识
     degraded: bool = False
+    denied: bool = False  # 行权限/过滤后无可执行范围 → 空结果，不是报错
 
 
 def build_ask_metric_schema(sem: SemanticLayer) -> dict:
@@ -151,11 +152,24 @@ def ask_fast(
     obs=None,
     role: str = "analyst_qa",
 ) -> AskResult:
-    """执行快路：前闸 → 纯函数计算 → FactStore。
+    """执行快路：前闸 → 行权限收窄 → 纯函数计算 → FactStore。
 
-    `role` 仅用于前闸留痕与调用方上下文，不做数据过滤；行权限在 T-4.1.4。
+    行级权限在**计算前**按角色收窄（P-10 / data-model §三）；
+    收窄后无可执行范围 → `denied=True` 空结果（不报错）；
+    有行但算不出（NaN）→ 仍抛 `NoFactError`（P-06，不许并进 denied）。
     """
     pre_tool_gate(req, sem)
+
+    condition = sem.row_filter(role, FACT_TABLE) or ""
+    visible = apply_row_filter(df, condition)
+    if obs is not None:
+        obs.log(
+            "fast_row_filter",
+            role=role,
+            condition=condition,
+            rows_before=len(df),
+            rows_after=len(visible),
+        )
 
     metric = req.metric
     group_by = req.dims[0] if req.dims else None
@@ -181,9 +195,29 @@ def ask_fast(
             req = AskRequest(metric=metric, filters=req.filters, time_range=req.time_range)
         pre_tool_gate(req, sem)
 
-    work = df
+    work = visible
     for key, value in req.filters.items():
         work = work[work[key] == value]
+
+    if work.empty:
+        # 越权或授权范围内无数据：空结果，不报错（security §2.2 / SG-01 #3）
+        if obs is not None:
+            obs.audit_append(
+                actor=role,
+                question=question,
+                route="fast",
+                sql=f"row_filter {len(df)}->{len(visible)}; {condition or '(none)'}",
+                review_level="auto",
+                human_action="row_filter_denied",
+                model=getattr(llm, "model", ""),
+            )
+        return AskResult(
+            metric=metric,
+            group_by=group_by,
+            facts=(),
+            data_as_of="",  # 无事实即无报告出口，不携带数据版本
+            denied=True,
+        )
 
     res = compute_metric(metric, work, group_by)
     unit = sem.metrics[metric]["unit"]

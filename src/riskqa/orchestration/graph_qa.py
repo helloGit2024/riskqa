@@ -13,7 +13,7 @@ from ..facts.store import FactStore
 from ..governance.review import classify_review
 from ..llm.fake import FakeLLM
 from ..semantic.layer import SemanticLayer
-from ..tools.gates import check_sql, inject_row_filter
+from ..tools.gates import apply_row_filter, check_sql, inject_row_filter
 from ..verify.gates import verify_report
 from .fast_path import AskRequest, ask_fast, parse_question
 from .observer import Observer
@@ -33,6 +33,7 @@ class QAState(TypedDict, total=False):
     result: dict
     trace: list
     steps: int
+    denied: bool  # 快路行权限/过滤后为空 → 跳过叙事，返回空结果（SG-01 #3）
 
 
 def sql_execute(df: pd.DataFrame, sql: str) -> pd.DataFrame:
@@ -102,6 +103,7 @@ def build_qa_graph(
 
     # ---- 快路：模型只选参数，SQL 由语义层模板生成（模型不写 SQL）----
     def fast_fc(state: QAState) -> dict:
+        effective_role = state.get("role", role)
         req = parse_question(state["question"], sem) or AskRequest(metric=state["metric"])
         result = ask_fast(
             req,
@@ -111,13 +113,14 @@ def build_qa_graph(
             question=state["question"],
             llm=llm,
             obs=obs,
-            role=role,
+            role=effective_role,
         )
         obs.cost(llm)
         return {
             "metric": result.metric,
             "group_by": result.group_by,
             "facts": list(state.get("facts", [])) + [asdict(f) for f in result.facts],
+            "denied": result.denied,
             "trace": state["trace"] + ["fast_fc"],
         }
 
@@ -281,10 +284,17 @@ def build_qa_graph(
         obs.cost(llm)
         return {"narrative": resp.get("text", ""), "trace": state["trace"] + ["fast_narrative"]}
 
+    def fast_after_fc(state: QAState) -> Literal["fast_narrative", "merge_verify"]:
+        return "merge_verify" if state.get("denied") else "fast_narrative"
+
     def merge_verify(state: QAState) -> dict:
         """汇合层：三重校验闸 + 失败整段回退规则模板（V1 纪律保留）"""
         narrative = state.get("narrative", "")
-        verdict = verify_report(narrative, facts, df)
+        # 独立重算必须与事实同口径：行权限收窄后的可见数据
+        visible = apply_row_filter(
+            df, sem.row_filter(state.get("role", role), "fact_application") or ""
+        )
+        verdict = verify_report(narrative, facts, visible)
         obs.log("merge_verify", passed=verdict.passed, failures=verdict.failures)
         if not verdict.passed:
             tmpl = (
@@ -296,7 +306,10 @@ def build_qa_graph(
                 "result": {"passed": False, "failures": verdict.failures},
                 "trace": state["trace"] + ["merge_verify(fallback)"],
             }
-        return {"result": {"passed": True}, "trace": state["trace"] + ["merge_verify"]}
+        result: dict = {"passed": True}
+        if state.get("denied"):
+            result["empty"] = True  # 越权空结果：无叙述、无报告，但不是错误
+        return {"result": result, "trace": state["trace"] + ["merge_verify"]}
 
     def fail_node(state: QAState) -> dict:
         obs.log("fail", reason="max_steps exceeded")
@@ -324,7 +337,11 @@ def build_qa_graph(
 
     g.add_edge(START, "entry_route")
     g.add_conditional_edges("entry_route", route_edge)
-    g.add_edge("fast_fc", "fast_narrative")
+    g.add_conditional_edges(
+        "fast_fc",
+        fast_after_fc,
+        {"fast_narrative": "fast_narrative", "merge_verify": "merge_verify"},
+    )
     g.add_edge("fast_narrative", "merge_verify")
     g.add_edge("slow_list_tables", "slow_get_schema")
     g.add_edge("slow_get_schema", "slow_check_sufficient")

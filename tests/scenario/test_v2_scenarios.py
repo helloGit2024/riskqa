@@ -18,7 +18,7 @@ from riskqa.orchestration.graph_attribution import build_attribution_graph
 from riskqa.orchestration.graph_qa import build_qa_graph, sql_execute
 from riskqa.verify.gates import verify_report
 
-V2_OVERALL_FPD = 0.2859042553191489  # legacy L1121 场景一
+V2_OVERALL_FPD = 0.2859042553191489  # legacy L1121 场景一（V4.0 基线；无行权限全量）
 V2_A_FPD = 0.22391857506361323  # legacy L1141 场景二
 V2_WRONG_FPD = 0.1461794019933555  # legacy L1188 场景五（慢路分母错）
 
@@ -49,7 +49,7 @@ def test_v2_1_fast_path_returns_fact_and_passes_gates(
     assert fact["fid"] == "F0001"
     assert fact["segment"] == "overall"
     assert fact["data_as_of"] == "2026-09-30"
-    assert fact["value"] == pytest.approx(V2_OVERALL_FPD, rel=1e-6)
+    assert fact["value"] == pytest.approx(V2_A_FPD, rel=1e-6)  # P-10：analyst 仅可见 A
 
 
 def test_v2_2_slow_path_injects_row_filter_and_returns_authorized_segment(

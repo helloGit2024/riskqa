@@ -26,7 +26,9 @@ from riskqa.semantic.layer import (
 )
 
 AS_OF = "2026-09-30"
+# 全量（无行权限）与 analyst 可见范围（channel='A'）两个基线，均为 demo 数据实测
 OVERALL_FPD30 = 0.2859042553191489
+ANALYST_FPD30 = 0.22391857506361323
 
 
 def _patched(semantic: SemanticLayer, name: str, patch: dict) -> SemanticLayer:
@@ -114,28 +116,69 @@ def test_reject_calc_not_registered(semantic: SemanticLayer, demo_df, facts):
 
 
 def test_result_contract(semantic: SemanticLayer, demo_df, facts):
+    """analyst 快路：行权限在聚合前生效，整体值＝仅 A 渠道值（data-model §三正例）。"""
     result = ask_fast(AskRequest(metric="fpd30_rate"), semantic, demo_df, facts)
     assert len(result.facts) == 1
-    assert result.facts[0].value == pytest.approx(OVERALL_FPD30)
+    assert result.facts[0].value == pytest.approx(ANALYST_FPD30)
     assert result.data_as_of == AS_OF
     assert result.ai_disclosure is True
     assert result.group_by is None
+    assert result.denied is False
+
+
+def test_admin_sees_full_population(semantic: SemanticLayer, demo_df, facts):
+    """risk_admin 无行权限：全量基线仍由本用例守护（旧场景一数值）。"""
+    result = ask_fast(AskRequest(metric="fpd30_rate"), semantic, demo_df, facts, role="risk_admin")
+    assert result.facts[0].value == pytest.approx(OVERALL_FPD30)
 
 
 def test_grouped_facts_contract(semantic: SemanticLayer, demo_df, facts):
     result = ask_fast(AskRequest(metric="fpd30_rate", dims=("channel",)), semantic, demo_df, facts)
     assert result.group_by == "channel"
-    assert {f.segment for f in result.facts} == {"channel=A", "channel=B", "channel=C"}
+    assert {f.segment for f in result.facts} == {"channel=A"}
+
+    admin = FactStore(data_as_of=AS_OF)
+    admin_result = ask_fast(
+        AskRequest(metric="fpd30_rate", dims=("channel",)),
+        semantic,
+        demo_df,
+        admin,
+        role="risk_admin",
+    )
+    assert {f.segment for f in admin_result.facts} == {"channel=A", "channel=B", "channel=C"}
+
+
+def test_unauthorized_returns_empty_result_with_audit(semantic, demo_df, facts, observer):
+    """SG-01 #3：越权渠道 → 空结果、不报错，审计留痕（role/条件/过滤前后行数）。"""
+    result = ask_fast(
+        AskRequest(metric="fpd30_rate", filters={"channel": "Z"}),
+        semantic,
+        demo_df,
+        facts,
+        question="Z 渠道 FPD30",
+        obs=observer,
+    )
+    assert result.denied is True
+    assert result.facts == ()
+    assert result.data_as_of == ""
+    row_filter_log = [x for x in observer.trace if x["node"] == "fast_row_filter"]
+    assert row_filter_log
+    assert row_filter_log[-1]["rows_before"] == len(demo_df)
+    assert row_filter_log[-1]["rows_after"] < len(demo_df)
+    assert observer.audit[-1].human_action == "row_filter_denied"
+    assert observer.audit[-1].actor == "analyst_qa"
 
 
 def test_no_fact_refuses_report(semantic: SemanticLayer, demo_df, facts):
-    """过滤后无数据 → 无事实，禁止出报告（P-06）。"""
+    """有行但算不出（NaN）→ 仍报错，不许并进 denied 空结果分支（R14）。"""
+    no_granted = demo_df.assign(is_pass=0)
     with pytest.raises(NoFactError):
         ask_fast(
-            AskRequest(metric="fpd30_rate", filters={"channel": "Z"}),
+            AskRequest(metric="fpd30_rate"),
             semantic,
-            demo_df,
+            no_granted,
             facts,
+            role="risk_admin",
         )
 
 
@@ -145,7 +188,11 @@ def test_changelog_empty_list_still_signed(semantic: SemanticLayer):
 
 
 def test_fast_path_p95_under_2s(semantic: SemanticLayer, demo_df: pd.DataFrame):
-    """验收原文：快路 P95<2s（阈值不放宽，抖动就修实现不降标准）。"""
+    """验收原文：快路 P95<2s（阈值不放宽，抖动就修实现不降标准）。
+
+    risk_admin 跑采样：保持 1200 行与 T-4.1.2 基线可比；analyst 的数值断言
+    由 test_result_contract 负责，不兼任性能采样。
+    """
     elapsed_ms: list[float] = []
     for _ in range(1000):
         store_facts = FactStore(data_as_of=AS_OF)
@@ -155,6 +202,7 @@ def test_fast_path_p95_under_2s(semantic: SemanticLayer, demo_df: pd.DataFrame):
             semantic,
             demo_df,
             store_facts,
+            role="risk_admin",
         )
         elapsed_ms.append((time.perf_counter() - start) * 1000)
 
