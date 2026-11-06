@@ -131,12 +131,14 @@
 - **状态**：**有条件完成（不标 ✅）**——单元测试项达标；路由准确率项顺延未实测，不冒充达标。
 - **难度**：⭐⭐
 
-#### T-4.1.2 · 快路 ask 链路
+#### T-4.1.2 · 快路 ask 链路 ✅（2026-11-06）
 - **做的事情**：四元组入参 + enum 收窄 + 前闸（P-04/05/08/09）+ 纯函数计算 + FactStore + 口径返回；无事实禁出报告。
 - **对应验收标准**：spec §3.1 问数域；AGENTS P-06/08/09
 - **依赖**：T-4.1.1
 - **涉及文件**：`src/riskqa/orchestration/fast_path.py`、`src/riskqa/tools/`
 - **验收怎么验**：发明指标/乱拆维度/未签字/纯函数未注册四类拒服测试 PASS；快路 P95<2s
+- **收尾核对（2026-11-06）**：`src/riskqa/orchestration/fast_path.py` 新建（`AskRequest`/`AskResult` 四元组、`build_ask_metric_schema`、`parse_question`、`pre_tool_gate`、`ask_fast`）；`graph_qa.py` 的 `fast_fc` 改为委托，图结构、慢路节点与既有断言未动。`tests/unit/test_fast_path.py` 15 条：四类拒服（未登记指标含 FakeLLM 覆盖、多维度/越权维度、未签字、纯函数未注册）+ enum 语义层同源 + 解析/过滤/时间窗 + 结果契约（单值与分组）+ 无事实拒出报告 + 空 changelog 仍视为已签字 + P95 断言。P95 实测（`pytest tests/unit/test_fast_path.py -s`）：n=1000，数据 1200 行 demo，单维度 `channel` 分组，中位数 1.31ms、P95 7.40ms，阈值 2000ms；断言在 `make test`/CI 内，未降阈值、未改为只留档。`make test` 74 passed / 1 xfailed；`make lint` 61 files formatted。**行级权限不在本任务验收原文**：快路本轮不做 df 过滤（`role` 仅前闸留痕），缺口登记 OPEN-QUESTIONS #33，由 T-4.1.4 收口。
+- **状态**：**✅ 达标（2026-11-06）** —— 验收原文两项（四类拒服 PASS、快路 P95<2s）均有实测证据；快路行级权限缺口见 #33，属 T-4.1.4 范围。
 - **难度**：⭐⭐⭐
 
 #### T-4.1.3 · 慢路 LangGraph 固定图
