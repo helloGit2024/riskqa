@@ -9,13 +9,13 @@ from typing import Any, Literal, TypedDict
 
 import pandas as pd
 
-from ..calc.metrics import compute_metric
 from ..facts.store import FactStore
 from ..governance.review import classify_review
 from ..llm.fake import FakeLLM
 from ..semantic.layer import SemanticLayer
 from ..tools.gates import check_sql, inject_row_filter
 from ..verify.gates import verify_report
+from .fast_path import AskRequest, ask_fast, parse_question
 from .observer import Observer
 
 
@@ -102,35 +102,22 @@ def build_qa_graph(
 
     # ---- 快路：模型只选参数，SQL 由语义层模板生成（模型不写 SQL）----
     def fast_fc(state: QAState) -> dict:
-        resp = llm.chat(
-            "extraction",
-            f"问题：{state['question']}。可选指标 enum={sem.metric_enum}，"
-            f"可选维度 enum={sem.dim_enum}。只选参数，不要算数。",
+        req = parse_question(state["question"], sem) or AskRequest(metric=state["metric"])
+        result = ask_fast(
+            req,
+            sem,
+            df,
+            facts,
+            question=state["question"],
+            llm=llm,
+            obs=obs,
+            role=role,
         )
-        action = resp.get("action", resp)
-        metric = action.get("metric", state["metric"])
-        group_by = action.get("group_by")
-        res = compute_metric(metric, df, group_by)
-        new_facts = list(state.get("facts", []))
-        if group_by:
-            for _, r in res.iterrows():
-                fid = facts.put(
-                    float(r["value"]),
-                    sem.metrics[metric]["unit"],
-                    metric,
-                    segment=f"{group_by}={r[group_by]}",
-                    source="fast",
-                )
-                new_facts.append(asdict(facts.get(fid)))
-        else:
-            fid = facts.put(float(res["value"][0]), sem.metrics[metric]["unit"], metric)
-            new_facts.append(asdict(facts.get(fid)))
-        obs.log("fast_fc", metric=metric, group_by=group_by)
         obs.cost(llm)
         return {
-            "metric": metric,
-            "group_by": group_by,
-            "facts": new_facts,
+            "metric": result.metric,
+            "group_by": result.group_by,
+            "facts": list(state.get("facts", [])) + [asdict(f) for f in result.facts],
             "trace": state["trace"] + ["fast_fc"],
         }
 
