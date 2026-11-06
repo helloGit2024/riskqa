@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Mapping
 
 import pandas as pd
 
@@ -90,9 +90,7 @@ def parse_question(question: str, sem: SemanticLayer) -> AskRequest | None:
         return None
     allowed = tuple(sem.metrics[metric]["dims"])
     lowered = question.lower()
-    dims = tuple(
-        d for d in allowed if any(k in lowered for k in _DIM_KEYWORDS.get(d, ()))
-    )
+    dims = tuple(d for d in allowed if any(k in lowered for k in _DIM_KEYWORDS.get(d, ())))
     filters: dict[str, str] = {}
     for m in _FILTER_RE.finditer(question):
         if m.group(1):
@@ -112,9 +110,7 @@ def pre_tool_gate(req: AskRequest, sem: SemanticLayer) -> None:
     """前闸：四类拒服（P-04 未登记 / P-05 未签字 / P-08 乱维度 / P-09 未注册）"""
     meta = sem.metrics.get(req.metric)
     if meta is None:
-        raise UnregisteredMetricError(
-            f"指标 {req.metric!r} 未登记，已登记：{sem.metric_enum}"
-        )
+        raise UnregisteredMetricError(f"指标 {req.metric!r} 未登记，已登记：{sem.metric_enum}")
 
     for field_name in ("owner", "signed_at", "changelog"):
         value = meta.get(field_name)
@@ -124,9 +120,7 @@ def pre_tool_gate(req: AskRequest, sem: SemanticLayer) -> None:
 
     if req.dims:
         if len(req.dims) > 1:
-            raise DimensionNotAllowedError(
-                f"快路当前只支持单维度分组，收到 {list(req.dims)}"
-            )
+            raise DimensionNotAllowedError(f"快路当前只支持单维度分组，收到 {list(req.dims)}")
         extra = set(req.dims) - set(meta["dims"])
         if extra:
             raise DimensionNotAllowedError(
