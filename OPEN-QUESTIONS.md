@@ -43,7 +43,8 @@
 | 27 | `fpd30_rate` 的 `desc` 文案在 legacy V2 与 `config/semantic_view.yaml` 中不同（后者多「（分母=放款户，宽限期 3 天）」16 字符），使慢路 prompt 变长、估算 token 成本 5394→5498（+1.9%）；指标数值与判定均未变 | `config/semantic_view.yaml`；`legacy/问数Agent_企业版V2.py`；`docs/experiments/2026-11-05-v40-equivalence.md` §五-2 | 口径描述以 config 为准（信息更完整），成本差异仅为估算值；若要求与 legacy 字面一致，请确认后改 desc | 你 |
 | 28 | 默认取数范围（近 30 天 / A 产品）尚未在 config 建模：`semantic_view.yaml` 无字段承载「时间窗 + 产品 + 渠道」的默认取数约定 | `config/semantic_view.yaml`；`docs/archaeology-report.md` 第六节 | 不写进 config，以免引入无消费方的字段；V4.1 决定由调用方传参还是新增字段（需先有慢路/快路消费方）；来源：T-4.0.9 签字 | 你 |
 | 29 | `psi` 原描述「期望 vs 实际」与实现不一致；已按 S-09=A 修正描述，实现仍为好坏样本（`y==1` vs `y==0`）分数分布差 | `config/semantic_view.yaml` `psi`；`src/riskqa/calc/metrics.py` L45-52 | 当前只改描述、不改计算，数值未变；若将来要做真正的期望/实际 PSI，属计算逻辑变更，需按 P-03 另走签字并重跑冻结值 | 你 |
-| 30 | 口径签字只有 Owner（用户）一方，缺落地方案 §4.3 第 4 步要求的「双方（业务 + 数仓）签字」 | `docs/archaeology/s05-landing-plan.md`；`config/semantic_view.yaml`；`docs/archaeology-report.md` 第六节、7.3 | **顺延 V4.1（2026-11-05 用户决定）**：缺**业务侧与数仓侧**两方签字（当前仅 Owner 单方）；顺延至 V4.1，作为 V4.1 **入口前置条件**；**V4.1 启动时先查本条**并复核是否补齐双签。未解决、不标已解决；不擅自改验收标准 | 你（业务 + 数仓） |
+| 30 | 口径签字只有 Owner（用户）一方，缺落地方案 §4.3 第 4 步要求的「双方（业务 + 数仓）签字」 | `docs/archaeology/s05-landing-plan.md`；`config/semantic_view.yaml`；`docs/archaeology-report.md` 第六节、7.3 | **顺延 V4.1（2026-11-05 用户决定）**：缺**业务侧与数仓侧**两方签字（当前仅 Owner 单方）；顺延至 V4.1，作为 V4.1 **入口前置条件**；**V4.1 启动时先查本条**并复核是否补齐双签。2026-11-06 V4.1 启动：用户确认双签仍未补齐，按现有记录开工（方案 A），本条继续挂起 | 你（业务 + 数仓） |
+| 32 | T-4.1.1 两项处理口径：① 任务书写 `synonyms`，YAML/nl2sql-core 实际字段为 `aliases`，以哪个为准？② 验收「路由层准确率 ≥95%（黄金题集）」在 runner（T-4.1.8）建成前无法实测 | `docs/tasks.md` T-4.1.1；`.trae/rules/nl2sql-core.md`；`config/semantic_view.yaml` | 2026-11-06 用户决定：① 以 YAML 的 `aliases` 为准，`synonyms` 只当概念名，不新增 YAML 字段；② 本任务只交付单元测试，路由准确率顺延 T-4.1.8 实测（Q019 手机号题 `route: fast` 但不命中指标，届时需定义该题在路由层的计分口径）。T-4.1.8 启动时先查本条 | 你 |
 
 ---
 
@@ -66,7 +67,7 @@
 ---
 
 <!-- AUTO-COLLECT:BEGIN -->
-### 🤖 自动汇总（2026-11-05 · 共 0 处）
+### 🤖 自动汇总（2026-11-06 · 共 0 处）
 
 扫描根目录：`/Users/tj/Documents/trae_projects/风控问数系统`
 

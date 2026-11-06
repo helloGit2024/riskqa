@@ -128,6 +128,8 @@
 - **依赖**：T-4.0.2
 - **涉及文件**：`src/riskqa/semantic/alias.py`
 - **验收怎么验**：单元测试覆盖全部 synonyms；路由层准确率 ≥95%（黄金题集）
+- **收尾核对（2026-11-06）**：`src/riskqa/semantic/alias.py` 新建（build_alias_index / resolve_token / match_question），`layer.py` 三方法改为委托（命中行为原样保持）；`tests/unit/test_alias.py` 8 条单测覆盖全部指标名与 aliases（`make test`：59 passed / 1 xfailed，未改既有断言）。术语以 YAML 的 `aliases` 为准，不新增 YAML 字段（Q1）。路由层准确率 ≥95% 顺延 T-4.1.8 实测（runner 未建，用户授权顺延，Q2，见 OPEN-QUESTIONS #32）。
+- **状态**：**有条件完成（不标 ✅）**——单元测试项达标；路由准确率项顺延未实测，不冒充达标。
 - **难度**：⭐⭐
 
 #### T-4.1.2 · 快路 ask 链路

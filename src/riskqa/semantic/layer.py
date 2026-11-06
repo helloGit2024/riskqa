@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from .alias import build_alias_index, match_question, resolve_token
+
 
 class UnregisteredMetricError(Exception):
     """模型或不登记的口径——拒绝执行，不猜不填"""
@@ -27,12 +29,7 @@ class SemanticLayer:
 
     def match_metric(self, question: str) -> str | None:
         """入口路由的命中判定：指标名 + 别名（业务口语"首期逾期"也要能命中）"""
-        q = question.lower()
-        for name, m in self.metrics.items():
-            candidates = [name, *m.get("aliases", [])]
-            if any(c.lower() in q for c in candidates):
-                return name
-        return None
+        return match_question(self.metrics, question)
 
     # ---- 派生：FC enum 的唯一来源（新增指标自动进工具 schema）----
     @property
@@ -41,15 +38,10 @@ class SemanticLayer:
 
     def alias_index(self) -> dict[str, str]:
         """别名 → 正式指标名。晋升时把问法聚类回填到这里"""
-        idx: dict[str, str] = {}
-        for name, m in self.metrics.items():
-            idx[name.lower()] = name
-            for a in m.get("aliases", []):
-                idx[a.lower()] = name
-        return idx
+        return build_alias_index(self.metrics)
 
     def resolve_alias(self, token: str) -> str | None:
-        return self.alias_index().get(token.strip().lower())
+        return resolve_token(self.alias_index(), token)
 
     def to_yaml(self) -> str:
         return yaml.safe_dump(
