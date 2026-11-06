@@ -99,7 +99,7 @@ CI 使用 Python 3.13，安装 `requirements.lock.txt` 后执行 `make ci`。本
 
 | 门禁 | 当前 | 更新日期 |
 |---|---|---|
-| QG-01 | ✅ `51 passed, 1 xfailed`，0 skip | 2026-11-06 |
+| QG-01 | ✅ `51 passed, 1 xfailed`，0 skip | 2026-11-04 |
 | QG-02 | ✅ 场景测试 17/17 通过（V2 九 + V3 八）；legacy 输出留档比对已完成，见 `docs/experiments/2026-11-05-v40-equivalence.md`（15 逐字节相同 / 1 顺序差异 / 1 真实差异 #26） | 2026-11-05 |
 | QG-03 | ✅ 5 指标 / 3 维度 / 2 表校验通过；治理护栏校验通过 | 2026-11-04 |
 | QG-04 | ✅ `git grep` 扫描全部已跟踪文件，0 命中 | 2026-11-04 |
