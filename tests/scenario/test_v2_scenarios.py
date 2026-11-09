@@ -284,7 +284,10 @@ def test_v2_9_degraded_llm_fabricated_ref_and_render_mismatch(demo_df):
 
     facts9 = FactStore(data_as_of="2026-09-30")
     facts9.put(0.28, "ratio", "fpd30_rate")
-    verdict = verify_report("模型 KS 达到 {{F9999}}，表现优异", facts9, demo_df)
+    # 只改输入叙事（补引 F0001），期望值一字不动；遍历范围按 docstring 收紧。
+    verdict = verify_report(
+        "模型 KS 达到 {{F9999}}，整体 FPD30 为 {{F0001}}，表现优异", facts9, demo_df
+    )
 
     assert verdict.passed is False
     assert verdict.failures[0][0] == "fabricated_ref"
