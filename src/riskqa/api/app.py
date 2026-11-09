@@ -20,12 +20,15 @@ from fastapi import FastAPI
 from ..data.snapshot import Manifest, load_snapshot_file
 from ..governance.config import load_governance_file
 from ..llm.fake import FakeLLM
+from ..orchestration.graph_qa import build_qa_graph
+from ..orchestration.observer import Observer
 from ..semantic.layer import load_semantic
 from ..store.db import connect
 from ..store.schema import init_db, verify_schema
 from .deps import AppDeps
 from .errors import install_error_handler
-from .routers import ops
+from .routers import ask, ops
+from .runtime import SharedFactStore, SlowOnlySemantic, spec_from_sem
 from .settings import Settings, load_settings
 
 
@@ -83,6 +86,15 @@ def create_app(deps: AppDeps | None = None, settings: Settings | None = None) ->
         st = settings or load_settings()
         app.state.settings = st
         app.state.deps = deps or _load_deps(st)
+        d = app.state.deps
+        # 图只建一次（interrupt 续跑要求同一 checkpointer 实例），事实走共享代理
+        obs = Observer()
+        facts = SharedFactStore()
+        spec = spec_from_sem(d.sem)
+        app.state.graph_ask = build_qa_graph(d.sem, d.df, facts, d.llm_factory(), obs, spec)
+        app.state.graph_explore = build_qa_graph(
+            SlowOnlySemantic(d.sem), d.df, facts, d.llm_factory(), obs, spec
+        )
         yield
 
     app = FastAPI(
@@ -92,7 +104,21 @@ def create_app(deps: AppDeps | None = None, settings: Settings | None = None) ->
         lifespan=lifespan,
     )
     install_error_handler(app)
+
+    @app.middleware("http")
+    async def add_ai_headers(request, call_next):
+        """P-16：所有出口（含错误响应）带 AI 标识与数据版本"""
+        response = await call_next(request)
+        app_deps = getattr(request.app.state, "deps", None)
+        manifest = getattr(app_deps, "manifest", None)
+        response.headers["X-AI-Disclosure"] = "true"
+        response.headers["X-Data-As-Of"] = (
+            manifest.data_as_of if manifest is not None else "unavailable"
+        )
+        return response
+
     app.include_router(ops.router, prefix="/api/v1")
+    app.include_router(ask.router, prefix="/api/v1")
     return app
 
 

@@ -280,3 +280,28 @@ def api_client(api_deps, api_settings):
 
     with TestClient(create_app(deps=api_deps, settings=api_settings)) as client:
         yield client
+
+
+@pytest.fixture
+def api_client_factory(api_settings, semantic, demo_df, governance_cfg, api_db_path, api_manifest):
+    """按脚本造 TestClient（T-4.1.5 第二笔）：脚本在建图时快照，每张图各持一份副本。
+
+    用 `with api_client_factory(script) as client:` 触发 lifespan（建图 + checkpointer）。
+    """
+    from fastapi.testclient import TestClient
+
+    from riskqa.api.app import create_app
+    from riskqa.api.deps import AppDeps
+
+    def _make(script: list[dict] | None = None) -> TestClient:
+        deps = AppDeps(
+            sem=semantic,
+            df=demo_df,
+            governance=governance_cfg,
+            db_path=api_db_path,
+            manifest=api_manifest,
+            llm_factory=lambda: FakeLLM(script=list(script or [])),
+        )
+        return TestClient(create_app(deps=deps, settings=api_settings))
+
+    return _make
