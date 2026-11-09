@@ -11,6 +11,8 @@ from typing import Any, Literal, TypedDict
 
 import pandas as pd
 
+from ..calc.metrics import METRIC_FUNCS
+from ..calc.recompute import cross_check
 from ..facts.store import FactStore
 from ..governance.review import classify_review
 from ..llm.fake import FakeLLM
@@ -41,6 +43,9 @@ class QAState(TypedDict, total=False):
     deadline: float  # 慢路时间预算截止时刻；人审等待时间会顺延
     corrections: int  # 驳回后重生成次数（修正轮次，不含首轮）
     fail_kind: str  # step_limit | timeout | cross_check
+    exec_result: list  # 慢路执行结果 [{segment, value}]，交叉验证通过后才落 FactStore
+    slow_metric: str  # 慢路 SQL 对应的指标名（用于独立重算）
+    cross_check: dict  # {"ok": bool, "items": [{label, slow, recomputed, ok}]}
 
 
 def sql_execute(df: pd.DataFrame, sql: str) -> pd.DataFrame:
@@ -73,6 +78,15 @@ def sql_execute(df: pd.DataFrame, sql: str) -> pd.DataFrame:
     if limit:
         out = out.head(int(limit))
     return out
+
+
+def metric_from_sql(sql: str) -> str:
+    """从 demo SQL 的聚合列反推指标名；无法判定返回空串（由交叉验证显式失败）"""
+    if re.search(r"\bis_fpd30\b", sql, re.IGNORECASE):
+        return "fpd30_rate"
+    if re.search(r"\bis_pass\b", sql, re.IGNORECASE):
+        return "pass_rate"
+    return ""
 
 
 def build_qa_graph(
@@ -292,23 +306,111 @@ def build_qa_graph(
                 "exec_error": str(e),
                 "trace": state["trace"] + ["slow_execute(degraded)"],
             }
-        new_facts = list(state.get("facts", []))
+        new_exec: list[dict] = []
         if "channel" in res.columns:
             for _, r in res.iterrows():
-                fid = facts.put(
-                    float(r["value"]),
-                    "ratio",
-                    "fpd30_rate",
-                    segment=f"channel={r['channel']}",
-                    source="slow",
-                )
-                new_facts.append(asdict(facts.get(fid)))
-        else:
-            fid = facts.put(float(res["value"].iloc[0]), "ratio", "fpd30_rate", source="slow")
-            new_facts.append(asdict(facts.get(fid)))
-        obs.log("slow_execute", sql=sql, injected=bool(cond))
+                new_exec.append({"segment": f"channel={r['channel']}", "value": float(r["value"])})
+        elif len(res):
+            new_exec.append({"segment": "overall", "value": float(res["value"].iloc[0])})
+        obs.log("slow_execute", sql=sql, injected=bool(cond), rows=len(new_exec))
         obs.cost(llm)
-        return {"facts": new_facts, "trace": state["trace"] + ["slow_execute"]}
+        # T-4.1.3：执行结果先不落库，交叉验证通过后才由 slow_commit 写 FactStore
+        return {
+            "exec_result": new_exec,
+            "slow_metric": metric_from_sql(state["sql"]),
+            "trace": state["trace"] + ["slow_execute"],
+        }
+
+    def slow_cross_check(state: QAState) -> dict:
+        """交叉验证：慢路值 vs 独立重算（calc 纯函数，P-03）。
+
+        重算数据必须是行权限收窄后的可见 df，且与慢路注入条件同口径，
+        否则会把"越权不可见"误判成"口径漂移"（T-4.1.4 同类隐患）。
+        """
+        rows = state.get("exec_result", [])
+        metric = state.get("slow_metric", "")
+        if not rows:
+            obs.log("slow_cross_check", skipped="无执行结果")
+            return {
+                "cross_check": {"ok": True, "items": []},
+                "trace": state["trace"] + ["slow_cross_check(skipped)"],
+            }
+        if metric not in METRIC_FUNCS:
+            item = {
+                "label": f"unknown@{metric or '?'}",
+                "slow": None,
+                "recomputed": None,
+                "ok": False,
+            }
+            return {
+                "cross_check": {"ok": False, "items": [item]},
+                "trace": state["trace"] + ["slow_cross_check(unresolved)"],
+            }
+        visible = apply_row_filter(
+            df, sem.row_filter(state.get("role", role), "fact_application") or ""
+        )
+        fn = METRIC_FUNCS[metric]
+        items: list[dict] = []
+        for row in rows:
+            segment = row["segment"]
+            if segment == "overall":
+                expect = float(fn(visible))
+            else:
+                dim, val = segment.split("=", 1)
+                sub = visible[visible[dim].astype(str) == val]
+                expect = float(fn(sub)) if len(sub) else float("nan")
+            ok, msg = cross_check(f"{metric}@{segment}", expect, row["value"])
+            items.append(
+                {
+                    "label": f"{metric}@{segment}",
+                    "slow": row["value"],
+                    "recomputed": expect,
+                    "ok": ok,
+                    "message": msg,
+                }
+            )
+        obs.log("slow_cross_check", ok=all(i["ok"] for i in items), items=len(items))
+        return {
+            "cross_check": {"ok": all(i["ok"] for i in items), "items": items},
+            "trace": state["trace"] + ["slow_cross_check"],
+        }
+
+    def cross_edge(state: QAState) -> Literal["slow_commit", "cross_fail"]:
+        return "slow_commit" if state.get("cross_check", {}).get("ok") else "cross_fail"
+
+    def slow_commit(state: QAState) -> dict:
+        """交叉验证通过后才落 FactStore（P-12：正式数字只来自已验证结果）"""
+        metric = state.get("slow_metric", "")
+        new_facts = list(state.get("facts", []))
+        for row in state.get("exec_result", []):
+            fid = facts.put(
+                float(row["value"]),
+                "ratio",
+                metric,
+                segment=row["segment"],
+                source="slow",
+            )
+            new_facts.append(asdict(facts.get(fid)))
+        obs.log("slow_commit", committed=len(state.get("exec_result", [])))
+        return {"facts": new_facts, "trace": state["trace"] + ["slow_commit"]}
+
+    def cross_fail(state: QAState) -> dict:
+        """交叉验证不一致：直接拒绝交付，双侧数字并列，绝不平均。
+
+        该叙事属诊断性输出，含裸数字，故直接 END、不进校验闸（P-06 例外）。
+        """
+        bad = [i for i in state.get("cross_check", {}).get("items", []) if not i["ok"]]
+        details = "；".join(
+            f"{i['label']}：慢路 {i['slow']} vs 独立重算 {i['recomputed']}" for i in bad
+        )
+        failures = [("cross_check", i["label"], i["slow"], i["recomputed"]) for i in bad]
+        obs.log("cross_fail", failures=len(failures))
+        return {
+            "facts": state.get("facts", []),
+            "result": {"passed": False, "failures": failures},
+            "narrative": f"[失败] 交叉验证不一致，拒绝交付（两侧数字并列，不做平均）：{details}",
+            "trace": state["trace"] + ["cross_fail"],
+        }
 
     def slow_narrative(state: QAState) -> dict:
         if state.get("human_rejected"):
@@ -402,6 +504,9 @@ def build_qa_graph(
     g.add_node("slow_sql_check", slow_sql_check)
     g.add_node("slow_review", slow_review)
     g.add_node("slow_execute", slow_execute)
+    g.add_node("slow_cross_check", slow_cross_check)
+    g.add_node("slow_commit", slow_commit)
+    g.add_node("cross_fail", cross_fail)
     g.add_node("slow_narrative", slow_narrative)
     g.add_node("merge_verify", merge_verify)
     g.add_node("fail", fail_node)
@@ -428,7 +533,14 @@ def build_qa_graph(
         {"slow_review": "slow_review", "slow_generate": "slow_generate", "fail": "fail"},
     )
     g.add_edge("slow_review", "slow_execute")
-    g.add_edge("slow_execute", "slow_narrative")
+    g.add_edge("slow_execute", "slow_cross_check")
+    g.add_conditional_edges(
+        "slow_cross_check",
+        cross_edge,
+        {"slow_commit": "slow_commit", "cross_fail": "cross_fail"},
+    )
+    g.add_edge("slow_commit", "slow_narrative")
+    g.add_edge("cross_fail", END)
     g.add_conditional_edges(
         "slow_narrative",
         slow_after_narrative,

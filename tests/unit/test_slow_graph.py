@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from riskqa.llm.fake import FakeLLM
 from riskqa.orchestration.graph_qa import build_qa_graph
 
@@ -14,6 +16,13 @@ GOOD_SQL = (
     "WHERE is_pass = 1 GROUP BY channel LIMIT 10"
 )
 BAD_SQL = "SELECT channel, AVG(is_fpd30) FROM fact_application GROUP BY channel"
+# 分母错（漏 is_pass=1）→ 与快路口径不一致
+WRONG_DENOM_SQL = "SELECT channel, AVG(is_fpd30) FROM fact_application GROUP BY channel LIMIT 10"
+# 无 GROUP BY 的整体口径：用于验证交叉验证用的是"行权限可见 df"
+OVERALL_SQL = "SELECT channel, AVG(is_fpd30) FROM fact_application WHERE is_pass = 1 LIMIT 10"
+
+ANALYST_FPD30 = 0.22391857506361323
+WRONG_FPD30 = 0.1461794019933555
 
 
 class FakeClock:
@@ -142,3 +151,89 @@ def test_slow_review_uses_state_role(semantic, demo_df, facts, observer, spec, f
     assert entry.actor == "risk_admin"
     assert entry.review_level == "auto"
     assert entry.human_action == "auto"
+
+
+def test_slow_cross_check_returns_both_sides(semantic, demo_df, facts, observer, spec, fake_llm):
+    """交叉验证不一致：双侧数字并列拒交付，不平均、不落 FactStore。"""
+    llm = fake_llm([{"tables": ["fact_application"]}, {"sql": WRONG_DENOM_SQL}])
+
+    out = _run(semantic, demo_df, facts, observer, spec, llm)
+
+    assert out["result"]["passed"] is False
+    kind, label, slow, recomputed = out["result"]["failures"][0]
+    assert kind == "cross_check"
+    assert label == "fpd30_rate@channel=A"
+    assert slow == pytest.approx(WRONG_FPD30, rel=1e-6)
+    assert recomputed == pytest.approx(ANALYST_FPD30, rel=1e-6)
+    # 叙事把两侧数字原样并列，且没有任何平均值
+    assert str(slow) in out["narrative"]
+    assert str(recomputed) in out["narrative"]
+    assert str((slow + recomputed) / 2) not in out["narrative"]
+    assert "不做平均" in out["narrative"]
+    assert facts.digest() == []  # 不一致的结果绝不落库
+    assert out["trace"][-1] == "cross_fail"
+
+
+def test_slow_cross_check_consistent_commits(semantic, demo_df, facts, observer, spec, fake_llm):
+    """交叉验证一致：通过后才写 FactStore，事实段与慢路一致。"""
+    llm = fake_llm(
+        [
+            {"tables": ["fact_application"]},
+            {"sql": GOOD_SQL},
+            {"text": "各渠道逾期见 {{F0001}}。"},
+        ]
+    )
+
+    out = _run(semantic, demo_df, facts, observer, spec, llm)
+
+    assert out["result"]["passed"] is True
+    assert len(facts.digest()) == 1  # analyst 行权限下仅 A 渠道
+    assert out["facts"][0]["segment"] == "channel=A"
+    assert out["facts"][0]["value"] == pytest.approx(ANALYST_FPD30, rel=1e-6)
+    assert out["cross_check"]["ok"] is True
+
+
+def test_slow_cross_check_uses_visible_df(semantic, demo_df, facts, observer, spec, fake_llm):
+    """反证：重算必须用行权限收窄后的可见 df。
+
+    analyst 的"整体"口径实际只覆盖 A 渠道（0.2239）。若用全量 df 重算会得到
+    0.2859，与本用例期望的 passed=True 直接冲突——防止 T-4.1.4 那类越权/口径
+    混用问题在交叉验证里复发。
+    """
+    llm = fake_llm(
+        [
+            {"tables": ["fact_application"]},
+            {"sql": OVERALL_SQL},
+            {"text": "整体逾期见 {{F0001}}。"},
+        ]
+    )
+
+    out = _run(semantic, demo_df, facts, observer, spec, llm)
+
+    assert out["result"]["passed"] is True
+    item = out["cross_check"]["items"][0]
+    assert item["label"] == "fpd30_rate@overall"
+    assert item["recomputed"] == pytest.approx(ANALYST_FPD30, rel=1e-6)
+    assert out["facts"][0]["value"] == pytest.approx(ANALYST_FPD30, rel=1e-6)
+
+
+def test_slow_degraded_sql_skips_cross_check(semantic, demo_df, facts, observer, spec, fake_llm):
+    """演示执行器不支持的 SQL 形态：跳过交叉验证，由校验闸抓编造引用（v2_3 同路径）。"""
+    llm = fake_llm(
+        [
+            {"tables": ["fact_application"]},
+            # MEDIAN 不在演示执行器支持范围，触发优雅降级（不是 must 级，不中断）
+            {
+                "sql": "SELECT channel, MEDIAN(is_fpd30) FROM fact_application "
+                "WHERE is_pass = 1 LIMIT 10"
+            },
+            {"text": "跨表查询完成，见 {{F0001}}。"},
+        ]
+    )
+
+    out = _run(semantic, demo_df, facts, observer, spec, llm)
+
+    assert out["result"]["passed"] is False
+    assert out["result"]["failures"][0][0] == "fabricated_ref"
+    assert facts.digest() == []
+    assert any("slow_cross_check(skipped)" == t for t in out["trace"])
