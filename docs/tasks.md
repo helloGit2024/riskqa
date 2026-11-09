@@ -141,12 +141,21 @@
 - **状态**：**✅ 达标（2026-11-06）** —— 验收原文两项（四类拒服 PASS、快路 P95<2s）均有实测证据；快路行级权限缺口见 #33，属 T-4.1.4 范围。
 - **难度**：⭐⭐⭐
 
-#### T-4.1.3 · 慢路 LangGraph 固定图
+#### T-4.1.3 · 慢路 LangGraph 固定图 ✅（2026-11-08）
 - **做的事情**：schema 链接 → SQL 生成 → 三闸 → 执行 → 修正（≤2 轮）→ 交叉验证 → 人审分级；interrupt 挂人审。
 - **对应验收标准**：spec §3.1；架构 §4.2
 - **依赖**：T-4.1.2
 - **涉及文件**：`src/riskqa/orchestration/slow_graph.py`
 - **验收怎么验**：慢路熔断 60s；修正轮数 ≤2；交叉验证不一致返回双侧数字（不平均）
+- **收尾核对（2026-11-08）**：按 D1-B 原地扩展 `graph_qa.py`，未新建 `slow_graph.py`（路径偏差，以实际落点为准）。三项验收均已实测：
+  - **60s 熔断**：`slow_list_tables` 起算 `deadline = now() + time_budget_s`，在 `slow_generate` / `slow_sql_check` / `slow_narrative` 三个节点入口协作式检查；超时 → `fail_kind=timeout` → `fail` 节点返回 `("timeout", 60.0)`，叙事“已熔断，拒绝交付半成品”。时钟通过 `build_qa_graph(..., now=...)` 注入，测试用 `FakeClock` + `ClockLLM` 推进 61s，不 sleep。人审 interrupt 等待时间顺延 `deadline`，不计入系统预算。
+  - **修正 ≤2 轮**：`max_steps` 默认 3（首生成 1 + 修正 2），新增 `corrections` 仅计“驳回后重生成”；实测 3 次生成 → `corrections == 2`、`("step_limit", 3)`、三次 `slow_sql_check` 全 `ok=False`。
+  - **交叉验证双侧数字**：新增 `slow_execute → slow_cross_check → (slow_commit | cross_fail)`。执行结果先不落库，通过 `slow_commit` 才写 FactStore（P-12）；不一致直接 `cross_fail → END`，`failures` 形如 `("cross_check", "fpd30_rate@channel=A", 0.1461794019933555, 0.22391857506361323)`，叙事两侧原值并列、不做平均。重算用行权限收窄后的可见 df + `calc` 纯函数（P-03），反证用例 `test_slow_cross_check_uses_visible_df` 钉住：analyst 整体口径必须重算为 0.2239，用全量 df 会得 0.2859 而失败。
+  - **人审分级**：`classify_review` 改用 `state["role"]`（原用 builder 闭包角色，属 bug 修复），审计 actor 同源；`must` 才 interrupt，`sample/auto` 仅留痕。
+- **有意变更（max_steps 默认 6→3）**：`build_qa_graph` 的 `max_steps` 默认值由 6 改为 3。原因＝验收要求“修正轮数 ≤2”，3 = 首生成 1 轮 + 修正 2 轮。授权人＝用户（T-4.1.3 方案 D2-A）。性质＝**行为变更，非放宽标准**。既有 `test_v2_4` 显式传 `max_steps=6`，`("step_limit", 6)` 断言原样通过；无任何既有断言被迫改动。
+- **cross_fail 不进校验闸的理由**：交叉验证失败时必须把两侧数字原样展示给用户判断，该叙事属**诊断性输出**、必然含裸数字；若先进 `merge_verify` 会被裸数字校验拦下并整段回退，双侧数字就丢了。故 `cross_fail → END`，按 P-06 例外处理（与 T-4.1.6 回退模板同一逻辑）。
+- **状态**：**✅ 达标（2026-11-08）** —— 三项验收均有对应用例；新增 9 条慢路用例（93→102 passed / 1 xfailed）；V2 九场景与 T-4.1.4/T-4.1.6 既有断言全绿。三笔：`0d2c8cd`（熔断与轮数）、`9abcfb3`（交叉验证与双侧数字）、本笔（docs 收尾）。
+- **已知限制**：① **#1** 内网 LLM endpoint 未定，本轮仅用 FakeLLM/规则抽取器，「SQL 生成质量 / schema 链接准确率」**不可验**（骨架可验、生成质量不可验）；② **#34** `time_range` 只解析不应用，慢路同样不应用，保持登记不动；③ **#30** 双签顺延 V4.1 入口前置，本任务不涉及，V4.1 退出门禁前须复核；④ raw log 无条件落库（P-12）与抽检队列持久化归属 **V4.2**（T-4.2.1 等），本轮只留 trace/audit；⑤ `slow_check_sufficient` 仍为占位（`ok=True`），按 D7-A 标注为骨架占位、不计入验收；⑥ 执行层仍是 pandas 迷你模拟器，生产需替换为数据库驱动并提供驱动级 `statement_timeout`（本轮的 60s 是编排层协作式熔断）。
 - **难度**：⭐⭐⭐⭐
 
 #### T-4.1.4 · SQL 三闸与行级权限 ✅（2026-11-06）
