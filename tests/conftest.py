@@ -212,3 +212,71 @@ def snapshot_root(tmp_path) -> Path:
     root = tmp_path / "snapshots"
     root.mkdir()
     return root
+
+
+# ---------- API v1（T-4.1.5）新增夹具：只新增，不改动上面任何既有夹具 ----------
+
+
+@pytest.fixture
+def api_settings():
+    from riskqa.api.settings import Settings, TokenIdentity
+
+    return Settings(
+        tokens={
+            "tok-analyst": TokenIdentity(user="u01", dept="风险策略部", role="analyst"),
+            "tok-owner": TokenIdentity(user="u02", dept="风险策略部", role="owner"),
+            "tok-admin": TokenIdentity(user="u03", dept="风控中台", role="admin"),
+        },
+        data_as_of=AS_OF,
+    )
+
+
+@pytest.fixture
+def api_manifest(demo_df):
+    from riskqa.data.snapshot import Manifest
+
+    return Manifest(
+        source="memory",
+        locator="memory",
+        data_as_of=AS_OF,
+        rows=len(demo_df),
+        data_hash="testdatahash",
+        file_hash="testfilehash",
+    )
+
+
+@pytest.fixture
+def api_db_path(tmp_path) -> Path:
+    """API 测试库：只给路径，连接由请求级 open_db 开（SQLite 不能跨线程复用）。"""
+    from riskqa.store.db import connect
+    from riskqa.store.schema import init_db
+
+    path = tmp_path / "api_ops.db"
+    conn = connect(path)
+    init_db(conn)
+    conn.close()
+    return path
+
+
+@pytest.fixture
+def api_deps(api_settings, semantic, demo_df, governance_cfg, api_db_path, api_manifest):
+    from riskqa.api.deps import AppDeps
+
+    return AppDeps(
+        sem=semantic,
+        df=demo_df,
+        governance=governance_cfg,
+        db_path=api_db_path,
+        manifest=api_manifest,
+        llm_factory=lambda: FakeLLM(script=[]),
+    )
+
+
+@pytest.fixture
+def api_client(api_deps, api_settings):
+    from fastapi.testclient import TestClient
+
+    from riskqa.api.app import create_app
+
+    with TestClient(create_app(deps=api_deps, settings=api_settings)) as client:
+        yield client

@@ -47,7 +47,7 @@ help:
 	@echo "make lint         - ruff check + format --check"
 	@echo "make format-check - ruff format --check"
 	@echo "make secret-scan  - 密钥/敏感信息扫描（QG-04，P-01）"
-	@echo "make health       - 服务健康检查（API /health，恢复后用）"
+	@echo "make health       - 服务健康检查（API /api/v1/health，接受 200/503）"
 	@echo "make run          - 启动 API 服务（127.0.0.1:8080）"
 	@echo "make api          - 同 run"
 	@echo "make mcp          - 启动 MCP Server（stdio）"
@@ -114,7 +114,12 @@ secret-scan:
 
 health:
 	@test -d src/riskqa/api || (echo "API 未建成——见 tasks.md T-4.1.5"; exit 1)
-	@curl -fsS http://127.0.0.1:8080/health || (echo "服务未响应——见 docs/ops-runbook.md A1"; exit 1)
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/health || true); \
+	if [ "$$code" = "200" ] || [ "$$code" = "503" ]; then \
+		echo "health: HTTP $$code（503 = degraded，三态见响应体；V4.1 无真 LLM，属预期）"; \
+	else \
+		echo "服务未响应（HTTP $$code）——见 docs/ops-runbook.md A1"; exit 1; \
+	fi
 
 run:
 	@test -d src/riskqa/api || (echo "API 未建成——见 tasks.md T-4.1.5"; exit 1)
