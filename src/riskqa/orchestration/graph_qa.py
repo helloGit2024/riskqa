@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any, Literal, TypedDict
 
@@ -35,6 +37,10 @@ class QAState(TypedDict, total=False):
     steps: int
     denied: bool  # 快路行权限/过滤后为空 → 跳过叙事，返回空结果（SG-01 #3）
     scope: dict  # 快路重算口径（filters/time_range），供校验闸按同口径重算
+    slow_started_at: float  # 进入慢路时刻（熔断计时起点）
+    deadline: float  # 慢路时间预算截止时刻；人审等待时间会顺延
+    corrections: int  # 驳回后重生成次数（修正轮次，不含首轮）
+    fail_kind: str  # step_limit | timeout | cross_check
 
 
 def sql_execute(df: pd.DataFrame, sql: str) -> pd.DataFrame:
@@ -77,9 +83,17 @@ def build_qa_graph(
     obs: Observer,
     spec: dict,
     role: str = "analyst_qa",
-    max_steps: int = 6,
+    max_steps: int = 3,
+    time_budget_s: float = 60.0,
+    now: Callable[[], float] = time.monotonic,
 ) -> Any:
-    """V2 核心：一张图同时装下快路和慢路，入口路由决定走哪条"""
+    """V2 核心：一张图同时装下快路和慢路，入口路由决定走哪条。
+
+    慢路两个硬约束（T-4.1.3）：
+    - max_steps 默认 3 = 首生成 1 轮 + 修正 2 轮（验收「修正轮数 ≤2」）
+    - time_budget_s 默认 60s，从进入慢路起算到叙事产出；协作式检查，
+      人审 interrupt 的等待时间不计入（人审不是系统慢）
+    """
     try:
         from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.graph import END, START, StateGraph
@@ -127,9 +141,20 @@ def build_qa_graph(
         }
 
     # ---- 慢路：text-to-SQL，模型写 SQL，但层层设闸 ----
+    def _expired(state: QAState) -> bool:
+        """协作式熔断：只在节点入口判断，不中断正在执行的调用（生产由驱动超时兜底）"""
+        deadline = state.get("deadline")
+        return deadline is not None and now() > deadline
+
     def slow_list_tables(state: QAState) -> dict:
-        obs.log("slow_list_tables", tables=sem.table_enum)
-        return {"trace": state["trace"] + ["slow_list_tables"]}
+        started = now()
+        obs.log("slow_list_tables", tables=sem.table_enum, budget_s=time_budget_s)
+        return {
+            "slow_started_at": started,
+            "deadline": started + time_budget_s,
+            "corrections": 0,
+            "trace": state["trace"] + ["slow_list_tables"],
+        }
 
     def slow_get_schema(state: QAState) -> dict:
         resp = llm.chat(
@@ -148,6 +173,9 @@ def build_qa_graph(
         return {"trace": state["trace"] + ["slow_check_sufficient"]}
 
     def slow_generate(state: QAState) -> dict:
+        if _expired(state):
+            obs.log("slow_generate", aborted="timeout")
+            return {"fail_kind": "timeout", "trace": state["trace"] + ["slow_generate(timeout)"]}
         fb = state.get("review_feedback")
         prompt = (
             f"问题：{state['question']}。"
@@ -163,11 +191,19 @@ def build_qa_graph(
         return {
             "sql": resp.get("sql", ""),
             "steps": state.get("steps", 0) + 1,
+            # 只有"上一轮被驳回后重生成"才算一次修正；首轮不计
+            "corrections": state.get("corrections", 0) + (1 if fb else 0),
             "review_feedback": "",
             "trace": state["trace"] + ["slow_generate"],
         }
 
+    def slow_after_generate(state: QAState) -> Literal["slow_sql_check", "fail"]:
+        return "fail" if state.get("fail_kind") == "timeout" else "slow_sql_check"
+
     def slow_sql_check(state: QAState) -> dict:
+        if _expired(state):
+            obs.log("slow_sql_check", aborted="timeout")
+            return {"fail_kind": "timeout"}
         verdict = check_sql(state["sql"])
         obs.log("slow_sql_check", ok=verdict.ok, violations=list(verdict.violations))
         if not verdict.ok:
@@ -175,6 +211,8 @@ def build_qa_graph(
         return {"review_feedback": ""}
 
     def sql_check_edge(state: QAState) -> Literal["slow_review", "slow_generate", "fail"]:
+        if state.get("fail_kind") == "timeout":
+            return "fail"
         if not state.get("review_feedback"):
             return "slow_review"
         if state.get("steps", 0) >= max_steps:
@@ -182,10 +220,16 @@ def build_qa_graph(
         return "slow_generate"
 
     def slow_review(state: QAState) -> dict:
-        """V2 分级人审：auto 免审（留痕）/ must 触发 interrupt 人工决策"""
-        level = classify_review(state["sql"], role)
-        obs.log("slow_review", level=level, sql=state["sql"])
+        """V2 分级人审：auto 免审（留痕）/ must 触发 interrupt 人工决策
+
+        分级与行权限必须同源（P-10）：角色取 state，不用 builder 闭包默认值。
+        """
+        effective_role = state.get("role", role)
+        level = classify_review(state["sql"], effective_role)
+        obs.log("slow_review", level=level, sql=state["sql"], role=effective_role)
+        extra: dict = {}
         if level == "must":
+            wait_start = now()
             resp = interrupt(
                 {
                     "action": "run_sql",
@@ -194,9 +238,11 @@ def build_qa_graph(
                     "review_level": level,
                 }
             )
+            # 人审等待不扣时间预算：把这段耗时顺延回 deadline
+            extra["deadline"] = state.get("deadline", wait_start) + (now() - wait_start)
             action = resp.get("type", "accept") if isinstance(resp, dict) else "accept"
             obs.audit_append(
-                actor=role,
+                actor=effective_role,
                 question=state["question"],
                 route="slow",
                 sql=state["sql"],
@@ -209,12 +255,13 @@ def build_qa_graph(
                     "narrative": f"[人审反馈] {resp.get('text', '')}",
                     "review_level": level,
                     "human_rejected": True,
+                    **extra,
                 }
             if action == "edit":
-                return {"sql": resp.get("sql", state["sql"]), "review_level": level}
+                return {"sql": resp.get("sql", state["sql"]), "review_level": level, **extra}
         else:
             obs.audit_append(
-                actor=role,
+                actor=effective_role,
                 question=state["question"],
                 route="slow",
                 sql=state["sql"],
@@ -222,14 +269,14 @@ def build_qa_graph(
                 human_action="auto",
                 model=llm.model,
             )
-        return {"review_level": level}
+        return {"review_level": level, **extra}
 
     def slow_execute(state: QAState) -> dict:
         if state.get("human_rejected"):
             obs.log("slow_execute", skipped="human_rejected")
             return {"trace": state["trace"] + ["slow_execute(skipped)"]}
         sql = state["sql"]
-        cond = sem.row_filter(role, "fact_application")
+        cond = sem.row_filter(state.get("role", role), "fact_application")
         sql = inject_row_filter(sql, "fact_application", cond)  # 行级权限注入
         try:
             res = sql_execute(df, sql)
@@ -266,6 +313,9 @@ def build_qa_graph(
     def slow_narrative(state: QAState) -> dict:
         if state.get("human_rejected"):
             return {"trace": state["trace"] + ["slow_narrative(skipped)"]}
+        if _expired(state):
+            obs.log("slow_narrative", aborted="timeout")
+            return {"fail_kind": "timeout", "trace": state["trace"] + ["slow_narrative(timeout)"]}
         resp = llm.chat(
             "narrative",
             f"根据以下事实写一段总结，只许引用 {{{{fid}}}}，禁写裸数字："
@@ -274,6 +324,9 @@ def build_qa_graph(
         obs.log("slow_narrative", text=resp.get("text", "")[:60])
         obs.cost(llm)
         return {"narrative": resp.get("text", ""), "trace": state["trace"] + ["slow_narrative"]}
+
+    def slow_after_narrative(state: QAState) -> Literal["merge_verify", "fail"]:
+        return "fail" if state.get("fail_kind") == "timeout" else "merge_verify"
 
     def fast_narrative(state: QAState) -> dict:
         """快路叙事：同样只许引用 fact_id"""
@@ -319,6 +372,17 @@ def build_qa_graph(
         return {"result": result, "trace": state["trace"] + ["merge_verify"]}
 
     def fail_node(state: QAState) -> dict:
+        kind = state.get("fail_kind", "step_limit")
+        if kind == "timeout":
+            obs.log("fail", reason="timeout", budget_s=time_budget_s)
+            return {
+                "facts": state.get("facts", []),
+                "result": {"passed": False, "failures": [("timeout", time_budget_s)]},
+                "narrative": (
+                    f"[失败] 慢路超出时间预算（{time_budget_s:g}s），已熔断，拒绝交付半成品"
+                ),
+                "trace": state["trace"] + ["fail(timeout)"],
+            }
         obs.log("fail", reason="max_steps exceeded")
         return {
             "facts": state.get("facts", []),
@@ -353,7 +417,11 @@ def build_qa_graph(
     g.add_edge("slow_list_tables", "slow_get_schema")
     g.add_edge("slow_get_schema", "slow_check_sufficient")
     g.add_edge("slow_check_sufficient", "slow_generate")
-    g.add_edge("slow_generate", "slow_sql_check")
+    g.add_conditional_edges(
+        "slow_generate",
+        slow_after_generate,
+        {"slow_sql_check": "slow_sql_check", "fail": "fail"},
+    )
     g.add_conditional_edges(
         "slow_sql_check",
         sql_check_edge,
@@ -361,7 +429,11 @@ def build_qa_graph(
     )
     g.add_edge("slow_review", "slow_execute")
     g.add_edge("slow_execute", "slow_narrative")
-    g.add_edge("slow_narrative", "merge_verify")
+    g.add_conditional_edges(
+        "slow_narrative",
+        slow_after_narrative,
+        {"merge_verify": "merge_verify", "fail": "fail"},
+    )
     g.add_edge("merge_verify", END)
     g.add_edge("fail", END)
     return g.compile(checkpointer=InMemorySaver())
