@@ -177,12 +177,16 @@
 - **验收怎么验**：openapi.yaml 无 ⚙️；8 端点示例全跑通；SG-01 第 1/2 项通过
 - **难度**：⭐⭐⭐
 
-#### T-4.1.6 · 校验闸中间件化与回退
+#### T-4.1.6 · 校验闸中间件化与回退 ✅（2026-11-08）
 - **做的事情**：三重检查（裸数字/编造引用/独立重算）实现为编排层中间件，不过即整份回退规则模板；回退率记审计。
 - **对应验收标准**：AGENTS P-06/07；spec §3.2
 - **依赖**：T-4.1.2
 - **涉及文件**：`src/riskqa/verify/`
 - **验收怎么验**：检查 2 用"长得像但不存在"的 F9999 验证（不查格式查存在）；独立重算入口与主流水线代码不共用（审查）
+- **收尾核对（2026-11-08）**：新增 `verify/recompute.py` 独立重算入口（直接调用 calc 纯函数，不经 `ask_fast` / `compute_metric` 编排链路）；新增 `verify/middleware.py` 作为编排层唯一入口，`graph_qa.merge_verify` 改为委托，按行权限 + 快路 `scope.filters` 重建重算数据（修复带 filters 的 `render_mismatch` 假阳性）。`AskResult` 增加 `scope`（filters/time_range）。检查 1 裸数字扩到任意位小数 / 百分比 / 千分位 / 区间 / 带单位整数，豁免 ISO 日期、年月、版本号（V4.1）、指标代号（FPD30/FPD7/FPD90/DPD30+）、维度取值（channel=A / A 渠道 / P1 / P2），重叠命中合并为一条；检查 2 引用全捕 `{{...}}`，空引用 `illegal_ref`、查不到 `fabricated_ref`（只查存在性不查格式，P-07），`{{F99999}}` 与 `{{not-a-fid}}` 均判 `fabricated_ref`；检查 3 只重算叙事实际引用且查得到的事实，未注册纯函数由静默 `continue` 改为显式 `unregistered_calc`（R14）。回退走 `fallback_to_template`，回退事件写 Observer 审计（`human_action=verify_fallback`，字段含 actor/question/route/`sql=verify_gate failures=[...]`/review_level=auto/model）；回退率可按「`verify_fallback` 审计条数 ÷ `merge_verify` trace 条数」统计。denied 空结果不进回退、不产生叙事。`make test` 93 passed / 1 xfailed；`make lint` 64 files formatted。新增用例 14 条（79→93）。三笔：`f33d99f`（verify 规则与独立重算入口）、`db5536d`（编排中间件与回退审计）、本笔（docs 收尾）。
+- **有意变更（遍历范围收紧）**：变更前检查 3 遍历 `facts.digest()` 全部事实；变更后只重算叙事实际引用且查得到的事实。统一表述：**校验闸只对"要说给用户听的那部分"负责，不连带审查库里所有中间事实。** 差异示例：digest 里放错值事实但叙事只引用另一条正确事实 → 变更前误报 `render_mismatch`，变更后通过（`test_unreferenced_fact_not_recomputed` 钉住，防回退成全量遍历）。场景九仅改输入叙事补引 `{{F0001}}`，`["fabricated_ref", "render_mismatch"]` 与 `failures[1][1] == "F0001"` 一字未动，属行为变更而非放宽标准。
+- **已知限制**：① `parse_question` 能解析 `time_range` 但计算与重算都不应用，`scope` 只回传不使用——登记 OPEN-QUESTIONS **#34**，本轮不实现（不扩大范围）；② 回退模板按 `facts.digest()` 列出全部事实（含本次未引用的中间事实）且直接输出裸值，属 **P-06 例外**，回退产物不再进校验闸（可用性让位一致性）；③ `.trae/rules/nl2sql-core.md` §4 将独立重算入口写作 `calc/recompute_all`，本轮按边界不改 `calc/`，实际落点为 `verify/recompute.py`（路径偏差记录，审查时以实际路径为准）。
+- **状态**：**✅ 达标（2026-11-08）** —— 验收原文两项均有实测：`{{F9999}}` 存在性判定 PASS（另有 `{{not-a-fid}}` 同判）；独立重算入口与编排链路分离（`verify/recompute.py` 不 import `orchestration`）。既有 17 场景与 T-4.1.4 五条断言全绿。
 - **难度**：⭐⭐⭐
 
 #### T-4.1.7 · LLM 网关与本地 provider

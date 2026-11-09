@@ -45,6 +45,7 @@
 | 29 | `psi` 原描述「期望 vs 实际」与实现不一致；已按 S-09=A 修正描述，实现仍为好坏样本（`y==1` vs `y==0`）分数分布差 | `config/semantic_view.yaml` `psi`；`src/riskqa/calc/metrics.py` L45-52 | 当前只改描述、不改计算，数值未变；若将来要做真正的期望/实际 PSI，属计算逻辑变更，需按 P-03 另走签字并重跑冻结值 | 你 |
 | 30 | 口径签字只有 Owner（用户）一方，缺落地方案 §4.3 第 4 步要求的「双方（业务 + 数仓）签字」 | `docs/archaeology/s05-landing-plan.md`；`config/semantic_view.yaml`；`docs/archaeology-report.md` 第六节、7.3 | **顺延 V4.1（2026-11-05 用户决定）**：缺**业务侧与数仓侧**两方签字（当前仅 Owner 单方）；顺延至 V4.1，作为 V4.1 **入口前置条件**；**V4.1 启动时先查本条**并复核是否补齐双签。2026-11-06 V4.1 启动：用户确认双签仍未补齐，按现有记录开工（方案 A），本条继续挂起 | 你（业务 + 数仓） |
 | 32 | T-4.1.1 两项处理口径：① 任务书写 `synonyms`，YAML/nl2sql-core 实际字段为 `aliases`，以哪个为准？② 验收「路由层准确率 ≥95%（黄金题集）」在 runner（T-4.1.8）建成前无法实测 | `docs/tasks.md` T-4.1.1；`.trae/rules/nl2sql-core.md`；`config/semantic_view.yaml` | 2026-11-06 用户决定：① 以 YAML 的 `aliases` 为准，`synonyms` 只当概念名，不新增 YAML 字段；② 本任务只交付单元测试，路由准确率顺延 T-4.1.8 实测（Q019 手机号题 `route: fast` 但不命中指标，届时需定义该题在路由层的计分口径）。T-4.1.8 启动时先查本条 | 你 |
+| 34 | 快路 `parse_question` 能解析 `time_range`（如 `2026-07`），但 `ask_fast` 计算与校验闸重算都不应用时间窗；`AskResult.scope` 只回传不使用，结果与不带时间窗相同 | `src/riskqa/orchestration/fast_path.py`；`src/riskqa/verify/middleware.py`；T-4.1.6 | 本轮不实现（不扩大 T-4.1.6 范围）：`time_range` 原样回传、不参与 df 收窄；默认路径：T-4.1.5 API 落地前决定是补数据层时间过滤还是从问数链路摘掉该参数；来源：T-4.1.6 执行 | 你 |
 
 
 ---
