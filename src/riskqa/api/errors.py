@@ -11,9 +11,10 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-# 契约 §3.3 全集 + 本轮新增 E_SLOW_UNCONVERGED（P6 拍板）
+# 契约 §3.3 全集 + 本轮新增 E_SLOW_UNCONVERGED（P6 拍板）/ E_NOT_FOUND（详情与证据 404）
 ERROR_STATUS: dict[str, int] = {
     "E_UNAUTHORIZED": 401,
+    "E_NOT_FOUND": 404,
     "E_UNREGISTERED_METRIC": 400,
     "E_UNSIGNED_METRIC": 400,
     "E_CALC_NOT_REGISTERED": 400,

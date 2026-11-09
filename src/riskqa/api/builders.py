@@ -126,6 +126,35 @@ def review_payload(row: dict) -> dict:
         "decided_by": row.get("decided_by"),
         "decision": row.get("decision"),
         "decided_at": row.get("decided_at"),
+        "sla_due": row.get("sla_due"),
+    }
+
+
+def fact_detail_payload(row: dict) -> dict:
+    """契约 Fact：FactRef + metric/source/qid/created_at"""
+    return {
+        **public_fact(row),
+        "metric": row["metric"],
+        "source": row["source"],
+        "qid": row.get("qid"),
+        "created_at": row["created_at"],
+    }
+
+
+def evidence_payload(log: dict, facts: list[dict], chain: list[dict], manifest) -> dict:
+    """契约 Evidence：raw log + 数据版本 + 关联事实 + 签字链（P-12）"""
+    return {
+        "qid": log["qid"],
+        "question": log["question"],
+        "sql": log["sql"],
+        "sql_edited": bool(log["sql_edited"]),
+        "data_as_of": manifest.data_as_of if manifest is not None else "",
+        "snapshot_digest": (
+            (manifest.file_hash or manifest.data_hash) if manifest is not None else ""
+        ),
+        "facts": [public_fact(f) for f in facts],
+        "confirmed_by": list(log.get("confirmed_by") or []),
+        "review_chain": [review_payload(r) for r in chain],
     }
 
 

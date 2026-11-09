@@ -58,7 +58,13 @@ class ReviewRepo:
         return data
 
     def list(
-        self, *, state: str | None = None, assignee: str | None = None, limit: int = 100
+        self,
+        *,
+        state: str | None = None,
+        assignee: str | None = None,
+        subject_type: str | None = None,
+        subject_id: str | None = None,
+        limit: int = 100,
     ) -> list[dict]:
         sql = "SELECT * FROM review_record"
         cond, args = [], []
@@ -68,6 +74,12 @@ class ReviewRepo:
         if assignee is not None:
             cond.append("assignee=?")
             args.append(assignee)
+        if subject_type is not None:
+            cond.append("subject_type=?")
+            args.append(subject_type)
+        if subject_id is not None:
+            cond.append("subject_id=?")
+            args.append(subject_id)
         if cond:
             sql += " WHERE " + " AND ".join(cond)
         sql += " ORDER BY sla_due ASC LIMIT ?"

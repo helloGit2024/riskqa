@@ -27,7 +27,7 @@ from ..store.db import connect
 from ..store.schema import init_db, verify_schema
 from .deps import AppDeps
 from .errors import install_error_handler
-from .routers import ask, ops
+from .routers import ask, evidence, governance, ops, review
 from .runtime import SharedFactStore, SlowOnlySemantic, spec_from_sem
 from .settings import Settings, load_settings
 
@@ -119,6 +119,9 @@ def create_app(deps: AppDeps | None = None, settings: Settings | None = None) ->
 
     app.include_router(ops.router, prefix="/api/v1")
     app.include_router(ask.router, prefix="/api/v1")
+    app.include_router(evidence.router, prefix="/api/v1")
+    app.include_router(review.router, prefix="/api/v1")
+    app.include_router(governance.router, prefix="/api/v1")
     return app
 
 

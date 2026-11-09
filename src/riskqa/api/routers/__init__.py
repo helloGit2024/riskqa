@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import ask, ops
+from . import ask, evidence, governance, ops, review
 
-__all__ = ["ask", "ops"]
+__all__ = ["ask", "evidence", "governance", "ops", "review"]

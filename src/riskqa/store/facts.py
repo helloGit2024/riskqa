@@ -64,7 +64,12 @@ class FactRepo:
         return dict(row) if row else None
 
     def list(
-        self, *, metric: str | None = None, segment: str | None = None, limit: int = 100
+        self,
+        *,
+        metric: str | None = None,
+        segment: str | None = None,
+        qid: str | None = None,
+        limit: int = 100,
     ) -> list[dict]:
         sql = "SELECT * FROM fact"
         cond, args = [], []
@@ -74,6 +79,9 @@ class FactRepo:
         if segment is not None:
             cond.append("segment=?")
             args.append(segment)
+        if qid is not None:
+            cond.append("qid=?")
+            args.append(qid)
         if cond:
             sql += " WHERE " + " AND ".join(cond)
         sql += " ORDER BY CAST(SUBSTR(fid, 2) AS INTEGER) LIMIT ?"

@@ -178,13 +178,16 @@
 - **关联**：QG-02 注记（V4.0 的 17/17 等价基线不变，V4.1 场景一按 P-10 变更语义，二者不可直接对比）。
 
 
-#### T-4.1.5 · REST API v1（8 端点）
+#### T-4.1.5 · REST API v1（8 端点）✅（2026-11-09）
 - **做的事情**：FastAPI 实现 openapi.yaml 全 8 端点；token 认证 + 角色；错误码全集；只绑 127.0.0.1。
 - **对应验收标准**：api-contract §七 冻结清单
 - **依赖**：T-4.1.2/3/4
 - **涉及文件**：`src/riskqa/api/`
 - **验收怎么验**：openapi.yaml 无 ⚙️；8 端点示例全跑通；SG-01 第 1/2 项通过
 - **难度**：⭐⭐⭐
+- **收尾核对（2026-11-09）**：8 端点全部落地——ask / explore / reviews/{rid}/decision / health 见前两笔（`17027a5`、`b20d9dd`）；本笔补齐 `GET /facts/{fid}`、`GET /evidence/{qid}`、`POST /reviews`、`GET /governance/candidates`。新增错误码 `E_NOT_FOUND`（404，已登记 api-contract §3.3）；`review_payload` 补契约 required 的 `sla_due`。candidates 复用治理层既有聚类与热度（`cluster_logs` + `heat`，不新造算法），热度基准日取当天（不沿用 legacy 写死的 2026-10-30），`conflict_flag` 只标同签名内 SQL 变体冲突；已裁决（signed/rejected）评审单不再出现在候选列表。角色矩阵：facts / evidence / reviews 为 analyst+，candidates 为 owner+（analyst → 403）。
+- **已知限制**：① raw log 生产落库属 T-4.2.1（ask / explore 当前不写 query_log），evidence 与 candidates 在真实链路中暂无数据，本版用夹具直写 ops.db 验证读取链路；② 候选 `state` 取该签名最新一张评审单（rid 单调递增），SLA 升级链（reminded/overdue/shelved）属 T-4.2.7；③ 提名阈值判定（`nominate`）与跨签名口径指纹冲突属 T-4.2.2 / T-4.2.3，本版不提前实现。
+- **状态**：**✅ 达标（2026-11-09）** —— `openapi.yaml` 无 `⚙️`（`test_no_placeholder_marker`）、8 路径与文档一致（`test_exactly_eight_paths`）；SG-01 #1 无 token → 401、#2 analyst 调 owner 端点 → 403 均有实测用例。`make lint` 84 files 全过；`make test` 147 passed / 1 xfailed（新增 14 条）。三笔：`17027a5`（骨架/认证/health）、`b20d9dd`（ask/explore/decision）、本笔（facts/evidence/reviews/candidates）。
 
 #### T-4.1.6 · 校验闸中间件化与回退 ✅（2026-11-08）
 - **做的事情**：三重检查（裸数字/编造引用/独立重算）实现为编排层中间件，不过即整份回退规则模板；回退率记审计。

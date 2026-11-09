@@ -30,6 +30,7 @@
 | code | 含义 | HTTP |
 |---|---|---|
 | `E_UNAUTHORIZED` | token 缺失/失效/角色不足 | 401 |
+| `E_NOT_FOUND` | fid / qid 不存在（引用必须回表可查，P-07） | 404 |
 | `E_UNREGISTERED_METRIC` | 指标未登记（P-04，不猜不填） | 400 |
 | `E_UNSIGNED_METRIC` | 指标未 Owner 签字（P-05） | 400 |
 | `E_CALC_NOT_REGISTERED` | 纯函数未注册，快路拒服（P-09） | 400 |

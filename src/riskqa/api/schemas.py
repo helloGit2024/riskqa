@@ -39,3 +39,15 @@ class DecisionBody(BaseModel):
     decision: Literal["approve", "reject", "shelve"]
     signer: str = Field(min_length=1)
     reason: str = ""
+
+
+class ReviewSubmitBody(BaseModel):
+    """ReviewSubmit：提交人审（P-11）；level=none 表示免审留痕"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject_type: Literal["query", "slow_result", "promotion", "attribution"]
+    subject_id: str = Field(min_length=1)
+    level: Literal["none", "spot", "must"]
+    assignee: str = Field(min_length=1)
+    material: dict | None = None
