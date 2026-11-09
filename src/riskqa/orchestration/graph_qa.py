@@ -14,7 +14,7 @@ from ..governance.review import classify_review
 from ..llm.fake import FakeLLM
 from ..semantic.layer import SemanticLayer
 from ..tools.gates import apply_row_filter, check_sql, inject_row_filter
-from ..verify.gates import verify_report
+from ..verify.middleware import run_verify_gate
 from .fast_path import AskRequest, ask_fast, parse_question
 from .observer import Observer
 
@@ -34,6 +34,7 @@ class QAState(TypedDict, total=False):
     trace: list
     steps: int
     denied: bool  # 快路行权限/过滤后为空 → 跳过叙事，返回空结果（SG-01 #3）
+    scope: dict  # 快路重算口径（filters/time_range），供校验闸按同口径重算
 
 
 def sql_execute(df: pd.DataFrame, sql: str) -> pd.DataFrame:
@@ -121,6 +122,7 @@ def build_qa_graph(
             "group_by": result.group_by,
             "facts": list(state.get("facts", [])) + [asdict(f) for f in result.facts],
             "denied": result.denied,
+            "scope": result.scope,
             "trace": state["trace"] + ["fast_fc"],
         }
 
@@ -288,22 +290,27 @@ def build_qa_graph(
         return "merge_verify" if state.get("denied") else "fast_narrative"
 
     def merge_verify(state: QAState) -> dict:
-        """汇合层：三重校验闸 + 失败整段回退规则模板（V1 纪律保留）"""
-        narrative = state.get("narrative", "")
-        # 独立重算必须与事实同口径：行权限收窄后的可见数据
+        """汇合层：三重校验闸 → 中间件；失败整段回退规则模板（T-4.1.6）"""
+        # 独立重算必须与事实同口径：行权限收窄 + 快路 scope（filters/time_range）
         visible = apply_row_filter(
             df, sem.row_filter(state.get("role", role), "fact_application") or ""
         )
-        verdict = verify_report(narrative, facts, visible)
-        obs.log("merge_verify", passed=verdict.passed, failures=verdict.failures)
-        if not verdict.passed:
-            tmpl = (
-                f"[规则模板回退] 校验闸未通过（{verdict.failures}），"
-                f"按规则模板输出事实清单：{json.dumps(state['facts'], ensure_ascii=False, default=str)}"
-            )
+        gate = run_verify_gate(
+            narrative=state.get("narrative", ""),
+            facts=facts,
+            df=visible,
+            scope=state.get("scope"),
+            spec=spec,
+            obs=obs,
+            question=state["question"],
+            role=state.get("role", role),
+            route=state.get("route", ""),
+            model=getattr(llm, "model", ""),
+        )
+        if not gate["passed"]:
             return {
-                "narrative": tmpl,
-                "result": {"passed": False, "failures": verdict.failures},
+                "narrative": gate["narrative"],
+                "result": {"passed": False, "failures": gate["failures"]},
                 "trace": state["trace"] + ["merge_verify(fallback)"],
             }
         result: dict = {"passed": True}

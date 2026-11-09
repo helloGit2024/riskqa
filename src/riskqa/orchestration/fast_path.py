@@ -65,6 +65,9 @@ class AskResult:
     ai_disclosure: bool = True  # P-16：所有出口带 AI 标识
     degraded: bool = False
     denied: bool = False  # 行权限/过滤后无可执行范围 → 空结果，不是报错
+    scope: Mapping[str, object] = field(
+        default_factory=dict
+    )  # D4-B：重算口径回传（filters/time_range），供校验闸按同口径重算
 
 
 def build_ask_metric_schema(sem: SemanticLayer) -> dict:
@@ -217,6 +220,7 @@ def ask_fast(
             facts=(),
             data_as_of="",  # 无事实即无报告出口，不携带数据版本
             denied=True,
+            scope={"filters": dict(req.filters), "time_range": req.time_range},
         )
 
     res = compute_metric(metric, work, group_by)
@@ -252,4 +256,5 @@ def ask_fast(
         group_by=group_by,
         facts=tuple(collected),
         data_as_of=collected[-1].data_as_of,
+        scope={"filters": dict(req.filters), "time_range": req.time_range},
     )

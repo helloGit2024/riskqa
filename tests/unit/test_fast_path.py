@@ -182,6 +182,22 @@ def test_no_fact_refuses_report(semantic: SemanticLayer, demo_df, facts):
         )
 
 
+def test_scope_carries_filters_and_time_range(semantic: SemanticLayer, demo_df, facts):
+    """D4-B：AskResult 回传重算口径；time_range 只回传、不参与计算（#34）。"""
+    result = ask_fast(
+        AskRequest(
+            metric="fpd30_rate",
+            filters={"channel": "A"},
+            time_range=("2026-07", "2026-07"),
+        ),
+        semantic,
+        demo_df,
+        facts,
+    )
+    assert result.scope == {"filters": {"channel": "A"}, "time_range": ("2026-07", "2026-07")}
+    assert result.facts[0].value == pytest.approx(ANALYST_FPD30)
+
+
 def test_changelog_empty_list_still_signed(semantic: SemanticLayer):
     """与 semantic/check.py 一致：changelog 允许空列表，不算未签字。"""
     pre_tool_gate(AskRequest(metric="psi"), semantic)
