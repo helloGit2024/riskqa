@@ -129,6 +129,7 @@ alert（升级链提醒发送记录）
 **目录与文件名**
 
 - 根目录 `data/snapshots/`；`*.csv` / `*.parquet` 进 `.gitignore`，manifest（`*.manifest.json`）可入库。
+- demo 快照例外：`synthetic: true` 的 manifest 与数据文件一样不进库（仓库只留 `.gitkeep`），由 `make demo-snapshot` 现场生成；详见 `ops-runbook.md` §七。
 - 数据文件：`<source>__<data_as_of>__<data_hash 前 8 位>.<ext>`；manifest 同名追加 `.manifest.json`，与数据文件同目录。
 - 新数据 = 新文件；同名不同内容显式拒绝覆盖；同内容重复写幂等返回已有 manifest。
 
@@ -147,6 +148,7 @@ alert（升级链提醒发送记录）
 | data_hash | TEXT | 归一后 DataFrame 的 16 位语义 hash（与 legacy `load_snapshot` 同口径，要求 RangeIndex） |
 | file_hash | TEXT | 数据文件全量 sha256（64 位十六进制），防篡改/位腐 |
 | created_at | TEXT | 落盘时间 `YYYY-MM-DD HH:MM:SS` 本地时间 |
+| synthetic | BOOLEAN | 合成数据硬标识；缺省 `false`（旧 manifest 向后兼容）。为 `true` 时 `data_as_of` 必须是 `DEMO`，且仅允许 `RISKQA_MODE=demo` 加载 |
 
 **双 hash 的用途**
 
@@ -160,6 +162,7 @@ alert（升级链提醒发送记录）
 - 读取以 manifest 为唯一入口：缺 manifest/数据文件 → `ManifestNotFoundError`；格式不支持 → `UnsupportedFormatError`；Parquet 无引擎 → `ParquetEngineMissingError`（本批只交付 CSV，见 OPEN-QUESTIONS #18）。
 - `data_as_of` 是业务日期（T+1），与 `query_log.ts` / `fact.created_at` 的墙钟时间不同源；报告两者都印，不互相推断。
 - 快照含客户级敏感数据（P-02）：只落内网 `data/snapshots/`，不提交 Git；备份按 `ops-runbook.md` 整目录拷贝。
+- 合成快照（`synthetic: true`）在非 demo 模式加载 → `SyntheticSnapshotError` 显式拒绝启动，不静默放行（R14 / P-12）。
 
 
 ## 三、★ 权限过滤的正确写法（对照示例）

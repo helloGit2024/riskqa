@@ -55,6 +55,8 @@
 └── README.md
 ```
 
+> demo 快照（`synthetic: true`、`data_as_of=DEMO`）同样不进库，只由 `make demo-snapshot` 现场生成；加载需 `RISKQA_MODE=demo`，详见 `docs/ops-runbook.md` §七。
+
 ## 四、什么进版本库
 
 | 进 | 不进 |

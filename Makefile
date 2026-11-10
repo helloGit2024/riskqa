@@ -5,7 +5,7 @@
 #   【V4.0 启用】随 tasks.md T-4.0.7 落地并当天实跑后生效；未建成时给出明确指路，不静默失败
 # 参数透传用变量：make test T="-k permission"（make 会吞 -k，anti-patterns：rag-kb 实测）
 
-.PHONY: help docs-check openq env-check test lint format-check secret-scan health run api mcp eval semantic-check governance-check check bootstrap python-guard ci
+.PHONY: help docs-check openq env-check test lint format-check secret-scan health run api mcp eval semantic-check governance-check check bootstrap python-guard ci demo-snapshot
 
 SCRIPTS := scripts
 PYTHON ?=
@@ -49,6 +49,7 @@ help:
 	@echo "make secret-scan  - 密钥/敏感信息扫描（QG-04，P-01）"
 	@echo "make health       - 服务健康检查（API /api/v1/health，接受 200/503）"
 	@echo "make run          - 启动 API 服务（127.0.0.1:8080）"
+	@echo "make demo-snapshot - 现场生成 demo 快照（合成数据，synthetic=true，不提交）"
 	@echo "make api          - 同 run"
 	@echo "make mcp          - 启动 MCP Server（stdio）"
 	@echo "make eval         - 跑黄金题集（evals/golden_set.yaml）"
@@ -124,6 +125,10 @@ health:
 run:
 	@test -d src/riskqa/api || (echo "API 未建成——见 tasks.md T-4.1.5"; exit 1)
 	$(PY) -m uvicorn riskqa.api.app:app --host 127.0.0.1 --port 8080
+
+demo-snapshot: python-guard
+	@test -d data/snapshots || (echo "data/snapshots/ 不存在——见 REPO_CONVENTION.md §三"; exit 1)
+	$(PY) $(SCRIPTS)/make_demo_snapshot.py
 
 api: run
 	@true

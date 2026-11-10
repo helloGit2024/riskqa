@@ -21,6 +21,7 @@ def health_payload(deps: AppDeps, settings: Settings) -> tuple[int, dict]:
     with open_db(deps) as conn:
         db_errors = verify_schema(conn)
     snapshot_ok = deps.manifest is not None
+    synthetic = bool(snapshot_ok and deps.manifest.synthetic)
     llm = "degraded_local" if settings.llm_mode == "fake" else "ok"
     ok = not db_errors and snapshot_ok and llm == "ok"
 
@@ -31,6 +32,8 @@ def health_payload(deps: AppDeps, settings: Settings) -> tuple[int, dict]:
             "latest": deps.manifest.data_as_of if snapshot_ok else "",
             "digest": (deps.manifest.file_hash or deps.manifest.data_hash) if snapshot_ok else "",
         },
+        # 合成数据一眼可见：demo-synthetic 时 latest 固定为 DEMO（P-12）
+        "data_mode": "demo-synthetic" if synthetic else "production",
         "llm_gateway": llm,
     }
     return (200 if ok else 503), body

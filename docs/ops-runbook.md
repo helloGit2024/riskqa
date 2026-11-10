@@ -106,3 +106,31 @@ git checkout v4.1.0       # 回滚（config/ 同库，YAML 一起回）
 | 每周 | 看磁盘与 ops.db 增速趋势；快路命中率（运营健康度的领先指标） |
 | 每月 | **备份恢复演练**（没演练过的备份等于没有备份）；保留期清理函数跑一次 |
 | 每季 | 误晋升率抽查（目标 0，spec §3.2）；黄金题集全量回归（`make eval`） |
+
+## 七、demo 快照（合成数据）
+
+> 仓库里**没有任何快照文件**（只有 `data/snapshots/.gitkeep`）：快照是运行数据，不是源码；真实快照含客户级明细，受 P-02 约束，只能落内网。demo 快照同样是生成物，数据文件与 manifest 都不入库。
+
+### 7.1 生成
+
+```bash
+make demo-snapshot
+```
+
+- 数据与测试同源：`scripts/demo_data.py`（seed=42、n=1200，与 `tests/conftest.py` 的 `demo_df` 共用同一函数，不复制第二份）。
+- 产物：`data/snapshots/demo_application__DEMO__<data_hash 前 8 位>.csv` + 同名 `.manifest.json`，已由 `.gitignore` 忽略。
+- manifest 带硬标识：`"synthetic": true`，`"data_as_of": "DEMO"`——**不允许**写成看起来真实的业务日期（写入与读取两处都会拒绝）。
+
+### 7.2 本地启动
+
+```bash
+RISKQA_MODE=demo make run     # 加载 synthetic 快照，health 的 data_mode = demo-synthetic
+```
+
+health 响应里 `snapshot.latest` 为 `DEMO`、`data_mode` 为 `demo-synthetic`，一眼可辨是模拟数据。
+
+### 7.3 生产如何拒绝
+
+- 加载器读 `RISKQA_MODE`（默认 `production`）；遇到 `synthetic: true` 而模式不是 `demo` → `SyntheticSnapshotError`，**直接拒绝启动**，错误信息含文件名、当前模式与 `RISKQA_MODE=demo` 的提示（R14 / P-12）。
+- 生产启动前确认 `RISKQA_MODE` 未设为 `demo`；快照目录内不应出现 `*__DEMO__*` 文件。
+- 不要手工把 `synthetic` 改成 `false` 或把 `data_as_of` 改成真实日期来"绕过"——改过的 manifest 与数据文件 hash 校验无关，但该行为本身就是数据造假，按事故处理。

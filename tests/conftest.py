@@ -11,14 +11,17 @@ import random
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+for _path in (SRC_DIR, SCRIPTS_DIR):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+from demo_data import build_demo_df  # noqa: E402
 
 from riskqa.facts.store import FactStore  # noqa: E402
 from riskqa.governance.clustering import QueryLog  # noqa: E402
@@ -53,37 +56,12 @@ def governance_cfg(governance_text: str):
 
 @pytest.fixture(scope="session")
 def demo_df() -> pd.DataFrame:
-    """申请样本：1200 行，固定 seed。
+    """申请样本：1200 行，固定 seed。构造逻辑唯一来源：`scripts/demo_data.py`。
 
-    来源：legacy/问数Agent_企业版V2.py L1069—L1091（build_demo_data），原文复制；
+    来源：legacy/问数Agent_企业版V2.py L1069—L1091（build_demo_data）；
     基线 2026-11-04，pandas 2.2.3。
     """
-    rng = np.random.default_rng(42)
-    n = 1200
-    channels = rng.choice(["A", "B", "C"], n, p=[0.5, 0.3, 0.2])
-    products = rng.choice(["P1", "P2"], n, p=[0.6, 0.4])
-    vintage = rng.choice(["2026-07", "2026-08"], n)
-    is_pass = (rng.random(n) < 0.62).astype(int)
-    score_v3 = np.clip(rng.normal(0.60, 0.15, n), 0.01, 0.99)
-    score_v2 = np.clip(rng.normal(0.55, 0.18, n), 0.01, 0.99)
-    y = (rng.random(n) < (0.38 - 0.32 * score_v3)).astype(int)
-    bad_p = np.where(channels == "B", 0.45, 0.25)
-    is_fpd30 = np.where(is_pass == 1, (rng.random(n) < bad_p).astype(int), 0)
-    return pd.DataFrame(
-        {
-            "apply_id": [f"AP{i:05d}" for i in range(n)],
-            "customer_id": [f"C{i:05d}" for i in range(n)],
-            "channel": channels,
-            "product": products,
-            "vintage": vintage,
-            "is_pass": is_pass,
-            "is_fpd30": is_fpd30,
-            "score": score_v3.round(4),
-            "score_v3": score_v3.round(4),
-            "score_v2": score_v2.round(4),
-            "y": y,
-        }
-    )
+    return build_demo_df()
 
 
 def _gen_logs(n: int = 200) -> list[QueryLog]:

@@ -16,8 +16,8 @@ __pycache__/
 .venv/
 venv/
 
-# 数据（REPO_CONVENTION.md §四：ops.db 与快照数据不进库，manifest 进）
+# 数据（REPO_CONVENTION.md §四：ops.db 与快照（数据 + manifest）不进库，只留 .gitkeep）
 data/ops.db
 data/ops.db-*
-data/snapshots/*.csv
-data/snapshots/*.parquet
+data/snapshots/*
+!data/snapshots/.gitkeep

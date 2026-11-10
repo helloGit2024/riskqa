@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI
 
-from ..data.snapshot import Manifest, load_snapshot_file
+from ..data.snapshot import Manifest, SyntheticSnapshotError, load_snapshot_file
 from ..governance.config import load_governance_file
 from ..llm.fake import FakeLLM
 from ..orchestration.graph_qa import build_qa_graph
@@ -45,6 +45,9 @@ def latest_snapshot(snapshot_dir: Path) -> tuple[pd.DataFrame, Manifest]:
     for path in manifests:
         try:
             loaded = load_snapshot_file(path)
+        except SyntheticSnapshotError:
+            # 模式闸门不是“某个文件坏了”：立即冒泡，错误原样给到启动日志（R14）
+            raise
         except Exception as e:  # noqa: BLE001  # 逐个探测，最终整体报错
             errors.append(f"{path.name}: {e}")
             continue

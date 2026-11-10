@@ -41,6 +41,10 @@ class ParquetEngineMissingError(SnapshotError):
     """请求 Parquet 但未安装引擎（R16 未批准，本批只做 CSV）"""
 
 
+class SyntheticSnapshotError(SnapshotError):
+    """合成（demo）快照只允许在 demo 模式加载——非 demo 必须拒绝启动（P-12/R14）"""
+
+
 @dataclass(frozen=True)
 class Manifest:
     """血缘凭证：报告首页必须印出 data_as_of；同 spec + 同快照 → 产物一致"""
@@ -56,6 +60,8 @@ class Manifest:
     created_at: str = ""
     format: str = "csv"
     dtypes: dict[str, str] | None = None
+    # 合成数据硬标识：旧 manifest 无此字段 → 按非 synthetic（向后兼容）
+    synthetic: bool = False
 
 
 # ---------- 既有内存版行为（保持不变） ----------
@@ -91,6 +97,25 @@ def load_snapshot(df: pd.DataFrame, source: str, locator: str, data_as_of: str):
 _AS_OF_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SOURCE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _FORMATS = {"csv": ".csv", "parquet": ".parquet"}
+DEMO_AS_OF = "DEMO"
+DEMO_MODE = "demo"
+
+
+def _validate_as_of(data_as_of: str, *, synthetic: bool) -> None:
+    """synthetic 快照必须用 DEMO 字面，不得伪装成真实业务日期"""
+    if synthetic:
+        if data_as_of != DEMO_AS_OF:
+            raise ValueError(
+                f"synthetic 快照的 data_as_of 必须是 {DEMO_AS_OF!r}，"
+                f"不得写成真实日期：{data_as_of!r}"
+            )
+        return
+    if not isinstance(data_as_of, str) or not _AS_OF_RE.match(data_as_of):
+        raise ValueError(f"data_as_of 必须是 YYYY-MM-DD：{data_as_of!r}")
+    try:
+        datetime.strptime(data_as_of, "%Y-%m-%d")
+    except ValueError as e:
+        raise ValueError(f"data_as_of 不是合法日期：{data_as_of!r}（{e}）") from e
 
 
 def _data_hash(norm: pd.DataFrame) -> str:
@@ -106,15 +131,6 @@ def _file_hash(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _validate_as_of(data_as_of: str) -> None:
-    if not isinstance(data_as_of, str) or not _AS_OF_RE.match(data_as_of):
-        raise ValueError(f"data_as_of 必须是 YYYY-MM-DD：{data_as_of!r}")
-    try:
-        datetime.strptime(data_as_of, "%Y-%m-%d")
-    except ValueError as e:
-        raise ValueError(f"data_as_of 不是合法日期：{data_as_of!r}（{e}）") from e
 
 
 def _validate_source(source: str) -> None:
@@ -135,6 +151,7 @@ def _manifest_dict(man: Manifest) -> dict[str, Any]:
         "data_hash": man.data_hash,
         "file_hash": man.file_hash,
         "created_at": man.created_at,
+        "synthetic": man.synthetic,
     }
 
 
@@ -143,6 +160,12 @@ def _manifest_from_dict(data: dict[str, Any]) -> Manifest:
     missing = [k for k in required if k not in data]
     if missing:
         raise SnapshotIntegrityError(f"manifest 缺字段：{missing}")
+    synthetic = bool(data.get("synthetic", False))
+    if synthetic and _AS_OF_RE.match(str(data["data_as_of"])):
+        raise SnapshotIntegrityError(
+            f"synthetic 快照的 data_as_of 不得写成真实日期：{data['data_as_of']!r}"
+            f"（应为 {DEMO_AS_OF!r}）"
+        )
     return Manifest(
         source=data["source"],
         locator=data["locator"],
@@ -155,6 +178,7 @@ def _manifest_from_dict(data: dict[str, Any]) -> Manifest:
         created_at=data.get("created_at", ""),
         format=data.get("format", "csv"),
         dtypes=data.get("dtypes"),
+        synthetic=synthetic,
     )
 
 
@@ -177,14 +201,16 @@ def write_snapshot(
     data_as_of: str,
     root: str | Path = "data/snapshots",
     fmt: str = "csv",
+    synthetic: bool = False,
 ) -> Manifest:
     """从 DataFrame 生成不可变快照 + manifest；返回 manifest。
 
     文件名 `<source>__<data_as_of>__<data_hash前8位>.<ext>`；同数据重复写幂等，
-    同名不同内容显式报错，绝不覆盖（P-12）。
+    同名不同内容显式报错，绝不覆盖（P-12）。`synthetic=True` 用于 demo 数据，
+    必须在 manifest 留硬标识且 data_as_of 固定为 DEMO。
     """
     _validate_source(source)
-    _validate_as_of(data_as_of)
+    _validate_as_of(data_as_of, synthetic=synthetic)
     if fmt == "parquet":
         raise ParquetEngineMissingError(
             "Parquet 引擎未安装（pyarrow/fastparquet 均缺）；本批只支持 CSV，见 R16/T-4.0.5"
@@ -227,6 +253,7 @@ def write_snapshot(
             created_at=_now_ts(),
             format=fmt,
             dtypes=dtypes,
+            synthetic=synthetic,
         )
         tmp_manifest.write_text(
             json.dumps(_manifest_dict(manifest), ensure_ascii=False, sort_keys=True, indent=2)
@@ -242,7 +269,9 @@ def write_snapshot(
 
         # 写完立刻回读自校验：写-读-hash 闭环失败就删掉刚写的两份文件
         try:
-            _, checked = load_snapshot_file(manifest_path, root=root_path)
+            _, checked = load_snapshot_file(
+                manifest_path, root=root_path, mode=DEMO_MODE if synthetic else None
+            )
         except SnapshotError:
             data_path.unlink(missing_ok=True)
             manifest_path.unlink(missing_ok=True)
@@ -282,11 +311,26 @@ def _now_ts() -> str:
 
 
 def load_snapshot_file(
-    manifest_path: str | Path, *, root: str | Path | None = None
+    manifest_path: str | Path,
+    *,
+    root: str | Path | None = None,
+    mode: str | None = None,
 ) -> tuple[pd.DataFrame, Manifest]:
-    """按 manifest 加载快照并做双 hash 校验；任何不一致都显式报错。"""
+    """按 manifest 加载快照并做双 hash 校验；任何不一致都显式报错。
+
+    `mode` 缺省读环境变量 `RISKQA_MODE`（默认 production）。synthetic 快照只允许
+    在 demo 模式加载，否则抛 `SyntheticSnapshotError`——拒绝启动，不静默放行。
+    """
     manifest_path = Path(manifest_path)
     man = _read_manifest(manifest_path)
+
+    if man.synthetic:
+        effective = mode if mode is not None else os.environ.get("RISKQA_MODE", "production")
+        if effective != DEMO_MODE:
+            raise SyntheticSnapshotError(
+                f"合成快照 {manifest_path.name}（synthetic=true）只允许 demo 模式加载："
+                f"请设置 RISKQA_MODE=demo；当前 RISKQA_MODE={effective!r}，拒绝启动（P-12/R14）"
+            )
 
     if man.format == "parquet":
         raise ParquetEngineMissingError(
